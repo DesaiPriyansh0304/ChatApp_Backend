@@ -409,18 +409,39 @@ exports.onlineByUser = async (req, res) => {
 exports.googlelogin = async (req, res) => {
   try {
     const { code } = req.body;
-    console.log("Google OAuth Code:", code);
+
+    if (!code) {
+      return res.status(400).json({
+        status: 400,
+        success: false,
+        message: "Authorization code is required",
+      });
+    }
+
+    console.log("Google OAuth Code received:", code);
 
     // Get tokens from Google
     const googleRes = await oauth2cilent.getToken(code);
     oauth2cilent.setCredentials(googleRes.tokens);
+
+    console.log("Google tokens received:", googleRes.tokens);
 
     // Get user info from Google
     const userRes = await axios.get(
       `https://www.googleapis.com/oauth2/v1/userinfo?alt=json&access_token=${googleRes.tokens.access_token}`
     );
 
+    console.log("Google user data:", userRes.data);
+
     const { email, name, picture, given_name, family_name } = userRes.data;
+
+    if (!email) {
+      return res.status(400).json({
+        status: 400,
+        success: false,
+        message: "Email not provided by Google",
+      });
+    }
 
     // Check if user exists
     let user = await User.findOne({ email });
@@ -438,29 +459,61 @@ exports.googlelogin = async (req, res) => {
         profile_avatar: picture || "",
         is_Confirmed: true, // Google users are automatically confirmed
       });
+
+      console.log("New user created:", user);
     } else {
       // Update existing user's profile picture if available
       if (picture && !user.profile_avatar) {
         user.profile_avatar = picture;
         await user.save();
       }
+
+      console.log("Existing user found:", user);
     }
+
+    // Generate token
+    const token = generateToken(user);
 
     // Successful Google login response
     res.status(200).json({
       status: 200,
       success: true,
       message: "Google Login successful",
-      userData: user,
-      token: generateToken(user),
+      userData: {
+        _id: user._id,
+        firstname: user.firstname,
+        lastname: user.lastname,
+        email: user.email,
+        profile_avatar: user.profile_avatar,
+      },
+      token: token,
       userId: user._id.toString(),
     });
   } catch (error) {
     console.error("Google Login Error:", error);
+
+    // Better error handling
+    if (error.code === "invalid_grant") {
+      return res.status(400).json({
+        status: 400,
+        success: false,
+        message: "Invalid authorization code. Please try again.",
+      });
+    }
+
+    if (error.response) {
+      console.error("Google API Error:", error.response.data);
+      return res.status(400).json({
+        status: 400,
+        success: false,
+        message: "Google authentication failed. Please try again.",
+      });
+    }
+
     res.status(500).json({
       status: 500,
       success: false,
-      message: "Google login failed. Please try again.",
+      message: "Internal server error. Please try again later.",
     });
   }
 };
