@@ -14,6 +14,7 @@ router.use("/invite", invitecontactrouter);
 router.post("/signup", AuthController.Register);
 router.post("/signin", AuthController.Login);
 router.post("/google", AuthController.googlelogin);
+router.post("/github", AuthController.githublogin);
 
 //Update-Profile
 router.put("/update-profile", UserMiddleware, AuthController.updateProfile);

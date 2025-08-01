@@ -7,8 +7,14 @@ const generateOtp = require("../utils/generateOTP");
 const sendEmailUtil = require("../utils/Nodemailerutil");
 const mongoose = require("mongoose");
 const jwt = require("jsonwebtoken");
-const { oauth2cilent } = require("../utils/Googleconfig");
+const { oauth2cilent } = require("../utils/oAuth/Googleconfig");
 const { default: axios } = require("axios");
+const {
+  GITHUB_CLIENT_ID,
+  GITHUB_CLIENT_SECRET,
+  GITHUB_TOKEN_URL,
+  GITHUB_USER_URL,
+} = require("../utils/oAuth/Githubconfig");
 
 {
   /*Register Section*/
@@ -507,6 +513,165 @@ exports.googlelogin = async (req, res) => {
         status: 400,
         success: false,
         message: "Google authentication failed. Please try again.",
+      });
+    }
+
+    res.status(500).json({
+      status: 500,
+      success: false,
+      message: "Internal server error. Please try again later.",
+    });
+  }
+};
+
+exports.githublogin = async (req, res) => {
+  try {
+    const { code } = req.body;
+
+    if (!code) {
+      return res.status(400).json({
+        status: 400,
+        success: false,
+        message: "Authorization code is required",
+      });
+    }
+
+    console.log("GitHub OAuth Code received:", code);
+
+    // Step 1: Exchange code for access token
+    const tokenResponse = await axios.post(
+      GITHUB_TOKEN_URL,
+      {
+        client_id: GITHUB_CLIENT_ID,
+        client_secret: GITHUB_CLIENT_SECRET,
+        code: code,
+      },
+      {
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    console.log("GitHub token response:", tokenResponse.data);
+
+    const { access_token, error } = tokenResponse.data;
+
+    if (error || !access_token) {
+      return res.status(400).json({
+        status: 400,
+        success: false,
+        message: "Failed to get access token from GitHub",
+      });
+    }
+
+    // Step 2: Get user info from GitHub
+    const userResponse = await axios.get(GITHUB_USER_URL, {
+      headers: {
+        Authorization: `Bearer ${access_token}`,
+        Accept: "application/vnd.github.v3+json",
+      },
+    });
+
+    console.log("GitHub user data:", userResponse.data);
+
+    const {
+      id: githubId,
+      login: username,
+      email,
+      name,
+      avatar_url,
+    } = userResponse.data;
+
+    // Step 3: Get user email if not public
+    let userEmail = email;
+    if (!userEmail) {
+      try {
+        const emailResponse = await axios.get(`${GITHUB_USER_URL}/emails`, {
+          headers: {
+            Authorization: `Bearer ${access_token}`,
+            Accept: "application/vnd.github.v3+json",
+          },
+        });
+
+        // Find primary email
+        const primaryEmail = emailResponse.data.find((email) => email.primary);
+        userEmail = primaryEmail ? primaryEmail.email : null;
+      } catch (emailError) {
+        console.log("Could not fetch email:", emailError.message);
+      }
+    }
+
+    if (!userEmail) {
+      return res.status(400).json({
+        status: 400,
+        success: false,
+        message:
+          "Email not provided by GitHub. Please make your email public in GitHub settings.",
+      });
+    }
+
+    // Step 4: Check if user exists
+    let user = await User.findOne({ email: userEmail });
+
+    if (!user) {
+      // Create new user if doesn't exist
+      const nameParts = (name || username || "GitHub User").split(" ");
+      const firstname = nameParts[0] || "GitHub";
+      const lastname = nameParts.slice(1).join(" ") || "User";
+
+      user = await User.create({
+        firstname: firstname,
+        lastname: lastname,
+        email: userEmail,
+        mobile: "", // You can ask for this later or make it optional
+        dob: new Date(), // Default date, you can ask for this later
+        gender: "other", // Default gender, you can ask for this later
+        password: "github_oauth", // Placeholder password for GitHub users
+        profile_avatar: avatar_url || "",
+        is_Confirmed: true, // GitHub users are automatically confirmed
+      });
+
+      console.log("New user created:", user);
+    } else {
+      // Update existing user's profile picture if available
+      if (avatar_url && !user.profile_avatar) {
+        user.profile_avatar = avatar_url;
+        await user.save();
+      }
+
+      console.log("Existing user found:", user);
+    }
+
+    // Step 5: Generate token and send response
+    const token = generateToken(user);
+
+    // Successful GitHub login response
+    res.status(200).json({
+      status: 200,
+      success: true,
+      message: "GitHub Login successful",
+      userData: {
+        _id: user._id,
+        firstname: user.firstname,
+        lastname: user.lastname,
+        email: user.email,
+        profile_avatar: user.profile_avatar,
+      },
+      token: token,
+      userId: user._id.toString(),
+    });
+  } catch (error) {
+    console.error("GitHub Login Error:", error);
+
+    // Better error handling
+    if (error.response) {
+      console.error("GitHub API Error:", error.response.data);
+      return res.status(400).json({
+        status: 400,
+        success: false,
+        message: "GitHub authentication failed. Please try again.",
       });
     }
 
