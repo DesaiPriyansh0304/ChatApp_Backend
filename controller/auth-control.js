@@ -526,7 +526,7 @@ exports.googlelogin = async (req, res) => {
 
 exports.githublogin = async (req, res) => {
   try {
-    const { code } = req.body;
+    const { code, redirect_uri } = req.body;
 
     if (!code) {
       return res.status(400).json({
@@ -537,32 +537,38 @@ exports.githublogin = async (req, res) => {
     }
 
     console.log("GitHub OAuth Code received:", code);
+    console.log("Redirect URI received:", redirect_uri);
 
     // Step 1: Exchange code for access token
-    const tokenResponse = await axios.post(
-      GITHUB_TOKEN_URL,
-      {
-        client_id: GITHUB_CLIENT_ID,
-        client_secret: GITHUB_CLIENT_SECRET,
-        code: code,
+    const tokenRequestData = {
+      client_id: GITHUB_CLIENT_ID,
+      client_secret: GITHUB_CLIENT_SECRET,
+      code: code,
+    };
+
+    // Add redirect_uri if provided by frontend
+    if (redirect_uri) {
+      tokenRequestData.redirect_uri = redirect_uri;
+    }
+
+    const tokenResponse = await axios.post(GITHUB_TOKEN_URL, tokenRequestData, {
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
       },
-      {
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-        },
-      }
-    );
+    });
 
     console.log("GitHub token response:", tokenResponse.data);
 
-    const { access_token, error } = tokenResponse.data;
+    const { access_token, error, error_description } = tokenResponse.data;
 
     if (error || !access_token) {
+      console.error("GitHub OAuth Error:", error, error_description);
       return res.status(400).json({
         status: 400,
         success: false,
-        message: "Failed to get access token from GitHub",
+        message: error_description || "Failed to get access token from GitHub",
+        error: error,
       });
     }
 
@@ -571,6 +577,7 @@ exports.githublogin = async (req, res) => {
       headers: {
         Authorization: `Bearer ${access_token}`,
         Accept: "application/vnd.github.v3+json",
+        "User-Agent": "ChatApp-OAuth", // GitHub requires User-Agent header
       },
     });
 
@@ -592,12 +599,15 @@ exports.githublogin = async (req, res) => {
           headers: {
             Authorization: `Bearer ${access_token}`,
             Accept: "application/vnd.github.v3+json",
+            "User-Agent": "ChatApp-OAuth",
           },
         });
 
         // Find primary email
         const primaryEmail = emailResponse.data.find((email) => email.primary);
         userEmail = primaryEmail ? primaryEmail.email : null;
+
+        console.log("GitHub emails:", emailResponse.data);
       } catch (emailError) {
         console.log("Could not fetch email:", emailError.message);
       }
@@ -608,7 +618,7 @@ exports.githublogin = async (req, res) => {
         status: 400,
         success: false,
         message:
-          "Email not provided by GitHub. Please make your email public in GitHub settings.",
+          "Email not provided by GitHub. Please make your email public in GitHub settings or grant email permission.",
       });
     }
 
@@ -631,13 +641,25 @@ exports.githublogin = async (req, res) => {
         password: "github_oauth", // Placeholder password for GitHub users
         profile_avatar: avatar_url || "",
         is_Confirmed: true, // GitHub users are automatically confirmed
+        github_id: githubId, // Store GitHub ID for future reference
       });
 
       console.log("New user created:", user);
     } else {
-      // Update existing user's profile picture if available
+      // Update existing user's profile picture and GitHub ID if available
+      let updated = false;
+
       if (avatar_url && !user.profile_avatar) {
         user.profile_avatar = avatar_url;
+        updated = true;
+      }
+
+      if (githubId && !user.github_id) {
+        user.github_id = githubId;
+        updated = true;
+      }
+
+      if (updated) {
         await user.save();
       }
 
@@ -668,10 +690,31 @@ exports.githublogin = async (req, res) => {
     // Better error handling
     if (error.response) {
       console.error("GitHub API Error:", error.response.data);
+      console.error("GitHub API Status:", error.response.status);
+
+      // Handle specific GitHub API errors
+      if (error.response.status === 401) {
+        return res.status(400).json({
+          status: 400,
+          success: false,
+          message:
+            "Invalid GitHub credentials. Please check your GitHub OAuth app configuration.",
+        });
+      }
+
+      if (error.response.status === 403) {
+        return res.status(400).json({
+          status: 400,
+          success: false,
+          message: "GitHub API rate limit exceeded. Please try again later.",
+        });
+      }
+
       return res.status(400).json({
         status: 400,
         success: false,
         message: "GitHub authentication failed. Please try again.",
+        error: error.response.data,
       });
     }
 
