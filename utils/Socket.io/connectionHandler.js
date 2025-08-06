@@ -22,6 +22,8 @@ class ConnectionHandler {
       userId: this.userId,
       status: "online",
     });
+
+    this.socket.emit("getOnlineUsers", Object.keys(userSocketMap));
   }
 
   handleChatOpen() {

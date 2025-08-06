@@ -1,168 +1,9 @@
 const User = require("../model/User-model");
-const bcrypt = require("bcryptjs");
-const crypto = require("crypto");
-const generateToken = require("../utils/generateToken");
-const conrdinary = require("../utils/Cloudinary");
-const generateOtp = require("../utils/generateOTP");
-const sendEmailUtil = require("../utils/Nodemailerutil");
+const Message = require("../model/Message-model");
+const conrdinary = require("../utils/Generate/Cloudinary");
 const mongoose = require("mongoose");
-const jwt = require("jsonwebtoken");
-const { oauth2cilent } = require("../utils/oAuth/Googleconfig");
-const { default: axios } = require("axios");
-const {
-  GITHUB_CLIENT_ID,
-  GITHUB_CLIENT_SECRET,
-  GITHUB_TOKEN_URL,
-  GITHUB_USER_URL,
-} = require("../utils/oAuth/Githubconfig");
 
-{
-  /*Register Section*/
-}
-exports.Register = async (req, res) => {
-  try {
-    const {
-      firstname,
-      lastname,
-      email,
-      mobile,
-      dob,
-      gender,
-      password,
-      profile_avatar,
-    } = req.body;
-
-    // Check if user already exists
-    const userExist = await User.findOne({ email });
-    if (userExist) {
-      return res.status(400).json({
-        status: 400,
-        success: false,
-        message: "Email already exists.",
-      });
-    }
-
-    // Generate OTP
-    const otp = generateOtp();
-    const otpExpiresAt = new Date(Date.now() + 3 * 60 * 1000); // 3 minutes from now
-
-    // Hash password
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
-    // Create user
-    const userCreated = await User.create({
-      firstname,
-      lastname,
-      email,
-      mobile,
-      dob,
-      gender,
-      password: hashedPassword,
-      profile_avatar,
-      otp,
-      otpExpiresAt,
-      is_Confirmed: false,
-    });
-
-    //invited by
-    const inviter = await User.findOne({ "invitedUsers.email": email });
-    if (inviter) {
-      // Add invitedBy info to the new user
-      userCreated.invitedBy = [
-        {
-          _id: inviter._id,
-          email: inviter.email,
-        },
-      ];
-      const invitedUser = inviter.invitedUsers.find((u) => u.email === email);
-      if (invitedUser) {
-        invitedUser.user = userCreated._id;
-        invitedUser.invited_is_Confirmed = false;
-      }
-      await inviter.save();
-    }
-
-    await userCreated.save();
-
-    // Send OTP email using utility
-    await sendEmailUtil({
-      to: email,
-      subject: "Verify Your Email - OTP",
-      text: `Hi ${firstname},\n\nYour OTP code is: ${otp}\n\nThis OTP is valid for 3 minutes.`,
-    });
-
-    // Send response
-    res.status(201).json({
-      status: 201,
-      success: true,
-      msg: "SignUp Successful. OTP sent to your email.Please verify",
-      // data: userCreated,
-      userId: userCreated._id.toString(),
-    });
-  } catch (error) {
-    console.error("Register Error:", error);
-    res
-      .status(500)
-      .json({ message: "Internal server error during registration." });
-  }
-};
-
-{
-  /*Login Section*/
-}
-exports.Login = async (req, res) => {
-  try {
-    const { email, password } = req.body;
-
-    // Check if user exists
-    const userExist = await User.findOne({ email });
-    if (!userExist) {
-      return res.status(400).json({
-        status: 400,
-        message: "Email/User Not Valid.",
-      });
-    }
-
-    // Check if email is verified
-    if (!userExist.is_Confirmed) {
-      return res.status(403).json({
-        status: 403,
-        message:
-          "Email not verified. Please verify your email before logging in.",
-      });
-    }
-
-    // Compare hashed password
-    const isMatch = await bcrypt.compare(password, userExist.password);
-    if (!isMatch) {
-      return res.status(400).json({
-        status: 400,
-        message: "Invalid Password.",
-      });
-    }
-
-    // Successful login response
-    res.status(200).json({
-      status: 200,
-      success: true,
-      message: "Login successful",
-      userData: userExist,
-      token: generateToken(userExist),
-      userId: userExist._id.toString(),
-    });
-  } catch (error) {
-    console.error("Login Error:", error);
-    res.status(500).json({
-      status: 500,
-      success: false,
-      message: "Internal server error during login.",
-    });
-  }
-};
-{
-  /*update to user profile deatil*/
-}
+//UpdateProfile Controller
 exports.updateProfile = async (req, res) => {
   try {
     const { profile_avatar, bio, firstname, lastname, mobile, dob, gender } =
@@ -205,6 +46,7 @@ exports.updateProfile = async (req, res) => {
     res.status(500).json({ message: "Internal server error  updateProfile" });
   }
 };
+
 //favoriteItem
 exports.favorite = async (req, res) => {
   try {
@@ -282,6 +124,7 @@ exports.SearchUser = async (req, res) => {
   }
 };
 
+//getFilter User Controller
 exports.getfilterByUser = async (req, res) => {
   try {
     const { filter, searchQuery } = req.body; // include searchQuery
@@ -392,6 +235,7 @@ exports.getfilterByUser = async (req, res) => {
   }
 };
 
+//online user by Controller
 exports.onlineByUser = async (req, res) => {
   try {
     const { userIds } = req.body;
@@ -410,318 +254,115 @@ exports.onlineByUser = async (req, res) => {
   }
 };
 
-//googlelogin
-
-exports.googlelogin = async (req, res) => {
+exports.getAllChatsForUser = async (req, res) => {
   try {
-    const { code } = req.body;
+    const userId = req.user.id; // Login user ID from JWT token or session
 
-    if (!code) {
-      return res.status(400).json({
-        status: 400,
-        success: false,
-        message: "Authorization code is required",
-      });
-    }
+    // Find all conversations where user is participant
+    const conversations = await Message.find({
+      $or: [
+        // Private chats where user is in userIds array
+        {
+          chatType: "private",
+          userIds: { $in: [userId] },
+        },
+        // Group chats where user is in userIds array
+        {
+          chatType: "group",
+          userIds: { $in: [userId] },
+        },
+      ],
+    })
+      .populate("userIds", "firstname lastname profile_avatar bio") // Populate user details
+      .populate("groupId", "groupName groupAvatar") // Populate group details if exists
+      .sort({ updatedAt: -1 }); // Sort by last updated time (latest first)
 
-    console.log("Google OAuth Code received:", code);
+    // Format the response data
+    const chatList = conversations.map((conversation) => {
+      // Get last message
+      const lastMessage =
+        conversation.messages.length > 0
+          ? conversation.messages[conversation.messages.length - 1]
+          : null;
 
-    // Get tokens from Google
-    const googleRes = await oauth2cilent.getToken(code);
-    oauth2cilent.setCredentials(googleRes.tokens);
+      // For private chat, get the other user's details
+      let chatDetails = {};
 
-    console.log("Google tokens received:", googleRes.tokens);
+      if (conversation.chatType === "private") {
+        const otherUser = conversation.userIds.find(
+          (user) => user._id.toString() !== userId.toString()
+        );
 
-    // Get user info from Google
-    const userRes = await axios.get(
-      `https://www.googleapis.com/oauth2/v1/userinfo?alt=json&access_token=${googleRes.tokens.access_token}`
-    );
-
-    console.log("Google user data:", userRes.data);
-
-    const { email, name, picture, given_name, family_name } = userRes.data;
-
-    if (!email) {
-      return res.status(400).json({
-        status: 400,
-        success: false,
-        message: "Email not provided by Google",
-      });
-    }
-
-    // Check if user exists
-    let user = await User.findOne({ email });
-
-    if (!user) {
-      // Create new user if doesn't exist
-      user = await User.create({
-        firstname: given_name || name?.split(" ")[0] || "Google",
-        lastname: family_name || name?.split(" ")[1] || "User",
-        email: email,
-        mobile: "", // You can ask for this later or make it optional
-        dob: new Date(), // Default date, you can ask for this later
-        gender: "other", // Default gender, you can ask for this later
-        password: "google_oauth", // Placeholder password for Google users
-        profile_avatar: picture || "",
-        is_Confirmed: true, // Google users are automatically confirmed
-      });
-
-      console.log("New user created:", user);
-    } else {
-      // Update existing user's profile picture if available
-      if (picture && !user.profile_avatar) {
-        user.profile_avatar = picture;
-        await user.save();
+        chatDetails = {
+          chatId: conversation._id,
+          chatType: "private",
+          userId: otherUser?._id,
+          name: otherUser
+            ? `${otherUser.firstname} ${otherUser.lastname}`
+            : "Unknown User",
+          avatar: otherUser?.profile_avatar || null,
+          bio: otherUser?.bio || null,
+          isOnline: false, // You can implement online status logic here
+        };
+      } else if (conversation.chatType === "group") {
+        chatDetails = {
+          chatId: conversation._id,
+          chatType: "group",
+          groupId: conversation.groupId?._id,
+          name:
+            conversation.groupName ||
+            conversation.groupId?.groupName ||
+            "Unnamed Group",
+          avatar: conversation.groupId?.groupAvatar || null,
+          memberCount: conversation.userIds.length,
+          createdBy: conversation.createdBy,
+        };
       }
 
-      console.log("Existing user found:", user);
-    }
+      // Get unread message count for current user
+      const unreadCount =
+        conversation.unreadMessageCount.find(
+          (item) => item.user.toString() === userId.toString()
+        )?.count || 0;
 
-    // Generate token
-    const token = generateToken(user);
+      return {
+        ...chatDetails,
+        lastMessage: lastMessage
+          ? {
+              messageId: lastMessage.messageId,
+              senderId: lastMessage.senderId,
+              type: lastMessage.type,
+              content: lastMessage.content,
+              text: lastMessage.text,
+              fileName: lastMessage.fileName,
+              createdAt: lastMessage.createdAt,
+            }
+          : null,
+        lastMessageTime: lastMessage?.createdAt || conversation.createdAt,
+        unreadCount: unreadCount,
+        updatedAt: conversation.updatedAt,
+      };
+    });
 
-    // Successful Google login response
+    // Sort by last message time (latest first)
+    chatList.sort((a, b) => {
+      const timeA = new Date(a.lastMessageTime);
+      const timeB = new Date(b.lastMessageTime);
+      return timeB - timeA; // Latest first
+    });
+
     res.status(200).json({
-      status: 200,
       success: true,
-      message: "Google Login successful",
-      userData: {
-        _id: user._id,
-        firstname: user.firstname,
-        lastname: user.lastname,
-        email: user.email,
-        profile_avatar: user.profile_avatar,
-      },
-      token: token,
-      userId: user._id.toString(),
+      message: "Chats fetched successfully",
+      totalChats: chatList.length,
+      data: chatList,
     });
   } catch (error) {
-    console.error("Google Login Error:", error);
-
-    // Better error handling
-    if (error.code === "invalid_grant") {
-      return res.status(400).json({
-        status: 400,
-        success: false,
-        message: "Invalid authorization code. Please try again.",
-      });
-    }
-
-    if (error.response) {
-      console.error("Google API Error:", error.response.data);
-      return res.status(400).json({
-        status: 400,
-        success: false,
-        message: "Google authentication failed. Please try again.",
-      });
-    }
-
+    console.error("Error fetching chats:", error);
     res.status(500).json({
-      status: 500,
       success: false,
-      message: "Internal server error. Please try again later.",
-    });
-  }
-};
-
-exports.githublogin = async (req, res) => {
-  try {
-    const { code, redirect_uri } = req.body;
-
-    if (!code) {
-      return res.status(400).json({
-        status: 400,
-        success: false,
-        message: "Authorization code is required",
-      });
-    }
-
-    console.log("GitHub OAuth Code received:", code);
-    console.log("Redirect URI received:", redirect_uri);
-
-    // Step 1: Exchange code for access token
-    const tokenRequestData = {
-      client_id: GITHUB_CLIENT_ID,
-      client_secret: GITHUB_CLIENT_SECRET,
-      code: code,
-    };
-
-    // Add redirect_uri if provided by frontend
-    if (redirect_uri) {
-      tokenRequestData.redirect_uri = redirect_uri;
-    }
-
-    const tokenResponse = await axios.post(GITHUB_TOKEN_URL, tokenRequestData, {
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-    });
-
-    console.log("GitHub token response:", tokenResponse.data);
-
-    const { access_token, error, error_description } = tokenResponse.data;
-
-    if (error || !access_token) {
-      console.error("GitHub OAuth Error:", error, error_description);
-      return res.status(400).json({
-        status: 400,
-        success: false,
-        message: error_description || "Failed to get access token from GitHub",
-        error: error,
-      });
-    }
-
-    // Step 2: Get user info from GitHub
-    const userResponse = await axios.get(GITHUB_USER_URL, {
-      headers: {
-        Authorization: `Bearer ${access_token}`,
-        Accept: "application/vnd.github.v3+json",
-        "User-Agent": "ChatApp-OAuth", // GitHub requires User-Agent header
-      },
-    });
-
-    console.log("GitHub user data:", userResponse.data);
-
-    const {
-      id: githubId,
-      login: username,
-      email,
-      name,
-      avatar_url,
-    } = userResponse.data;
-
-    // Step 3: Get user email if not public
-    let userEmail = email;
-    if (!userEmail) {
-      try {
-        const emailResponse = await axios.get(`${GITHUB_USER_URL}/emails`, {
-          headers: {
-            Authorization: `Bearer ${access_token}`,
-            Accept: "application/vnd.github.v3+json",
-            "User-Agent": "ChatApp-OAuth",
-          },
-        });
-
-        // Find primary email
-        const primaryEmail = emailResponse.data.find((email) => email.primary);
-        userEmail = primaryEmail ? primaryEmail.email : null;
-
-        console.log("GitHub emails:", emailResponse.data);
-      } catch (emailError) {
-        console.log("Could not fetch email:", emailError.message);
-      }
-    }
-
-    if (!userEmail) {
-      return res.status(400).json({
-        status: 400,
-        success: false,
-        message:
-          "Email not provided by GitHub. Please make your email public in GitHub settings or grant email permission.",
-      });
-    }
-
-    // Step 4: Check if user exists
-    let user = await User.findOne({ email: userEmail });
-
-    if (!user) {
-      // Create new user if doesn't exist
-      const nameParts = (name || username || "GitHub User").split(" ");
-      const firstname = nameParts[0] || "GitHub";
-      const lastname = nameParts.slice(1).join(" ") || "User";
-
-      user = await User.create({
-        firstname: firstname,
-        lastname: lastname,
-        email: userEmail,
-        mobile: "", // You can ask for this later or make it optional
-        dob: new Date(), // Default date, you can ask for this later
-        gender: "other", // Default gender, you can ask for this later
-        password: "github_oauth", // Placeholder password for GitHub users
-        profile_avatar: avatar_url || "",
-        is_Confirmed: true, // GitHub users are automatically confirmed
-        github_id: githubId, // Store GitHub ID for future reference
-      });
-
-      console.log("New user created:", user);
-    } else {
-      // Update existing user's profile picture and GitHub ID if available
-      let updated = false;
-
-      if (avatar_url && !user.profile_avatar) {
-        user.profile_avatar = avatar_url;
-        updated = true;
-      }
-
-      if (githubId && !user.github_id) {
-        user.github_id = githubId;
-        updated = true;
-      }
-
-      if (updated) {
-        await user.save();
-      }
-
-      console.log("Existing user found:", user);
-    }
-
-    // Step 5: Generate token and send response
-    const token = generateToken(user);
-
-    // Successful GitHub login response
-    res.status(200).json({
-      status: 200,
-      success: true,
-      message: "GitHub Login successful",
-      userData: {
-        _id: user._id,
-        firstname: user.firstname,
-        lastname: user.lastname,
-        email: user.email,
-        profile_avatar: user.profile_avatar,
-      },
-      token: token,
-      userId: user._id.toString(),
-    });
-  } catch (error) {
-    console.error("GitHub Login Error:", error);
-
-    // Better error handling
-    if (error.response) {
-      console.error("GitHub API Error:", error.response.data);
-      console.error("GitHub API Status:", error.response.status);
-
-      // Handle specific GitHub API errors
-      if (error.response.status === 401) {
-        return res.status(400).json({
-          status: 400,
-          success: false,
-          message:
-            "Invalid GitHub credentials. Please check your GitHub OAuth app configuration.",
-        });
-      }
-
-      if (error.response.status === 403) {
-        return res.status(400).json({
-          status: 400,
-          success: false,
-          message: "GitHub API rate limit exceeded. Please try again later.",
-        });
-      }
-
-      return res.status(400).json({
-        status: 400,
-        success: false,
-        message: "GitHub authentication failed. Please try again.",
-        error: error.response.data,
-      });
-    }
-
-    res.status(500).json({
-      status: 500,
-      success: false,
-      message: "Internal server error. Please try again later.",
+      message: "Failed to fetch chats",
+      error: error.message,
     });
   }
 };

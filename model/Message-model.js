@@ -56,17 +56,20 @@ const groupUserSchema = new mongoose.Schema(
 const conversationHistorySchema = new mongoose.Schema(
   {
     chatType: { type: String, enum: ["private", "group"], required: true },
-
-    // 👇 This will store either groupUserSchema or privateUserSchema
     userIds: {
-      type: [mongoose.Schema.Types.Mixed], // Dynamic: you control the shape in logic
+      type: [mongoose.Schema.Types.Mixed],
       default: [],
     },
-
-    groupId: { type: mongoose.Schema.Types.ObjectId, ref: "Group" }, // For group chats
-    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // For group creation
-    groupName: { type: String }, // Optional group name
-    messages: [messageSubSchema], // All chat messages
+    groupId: { type: mongoose.Schema.Types.ObjectId, ref: "Group" },
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    groupName: { type: String },
+    messages: [messageSubSchema],
+    unreadMessages: [
+      {
+        user: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        message: messageSubSchema,
+      },
+    ],
     unreadMessageCount: [
       {
         user: { type: mongoose.Schema.Types.ObjectId, ref: "User" },

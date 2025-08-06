@@ -5,8 +5,17 @@ const cors = require("cors");
 const connectDB = require("./config/db");
 const indexRouter = require("./router/index");
 const { initSocket } = require("./utils/Socket.io/index");
+// Security Check
+const helmet = require("helmet");
+const mongoSanitize = require("express-mongo-sanitize");
+const xss = require("xss-clean");
 
 const app = express();
+
+// Security Check
+app.use(helmet());
+app.use(mongoSanitize());
+app.use(xss());
 
 // Middleware
 app.use(express.json({ limit: "10mb" }));
@@ -21,14 +30,6 @@ app.use(
 
 // API Routes
 app.use("/api", indexRouter);
-
-// ADD THIS - 404 handler for API routes
-// app.use("/api/*", (req, res) => {
-//   res.status(404).json({
-//     error: "API endpoint not found",
-//     path: req.originalUrl,
-//   });
-// });
 
 // HTTP Server
 const server = http.createServer(app);

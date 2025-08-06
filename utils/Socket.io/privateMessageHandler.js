@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const { userSocketMap, openedChats } = require("./socketmap");
 const { uploadFiles, convertSizes } = require("./fileUploader");
 const UnreadCountService = require("./Unreadmessage");
+const ChatListHandler = require("./chatListHandler");
 
 class PrivateMessageHandler {
   constructor(io, socket) {
@@ -83,6 +84,14 @@ class PrivateMessageHandler {
 
         // Sender ને message emit કરો
         this.socket.emit("privateMessage", normalizedMessage);
+
+        // 🆕 Chat list update કરો બંને users માટે
+        const affectedUserIds = [senderId, receiverId];
+        await ChatListHandler.updateChatListForUsers(
+          this.io,
+          conversation._id,
+          affectedUserIds
+        );
       } catch (err) {
         console.error("❌ Error saving private message:", err);
       }

@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const { userSocketMap, openedChats } = require("./socketmap");
 const { uploadFiles } = require("./fileUploader");
 const UnreadCountService = require("./Unreadmessage");
+const ChatListHandler = require("./chatListHandler");
 
 const processedMessages = new Map();
 
@@ -119,6 +120,16 @@ class GroupMessageHandler {
           groupId,
           normalizedMessage,
           this.io
+        );
+
+        // 🆕 Chat list update કરો બધા group members માટે
+        const affectedUserIds = conversation.userIds.map((userObj) =>
+          userObj.user.toString()
+        );
+        await ChatListHandler.updateChatListForUsers(
+          this.io,
+          conversation._id,
+          affectedUserIds
         );
       } catch (error) {
         console.error("⚫ Error in groupMessage:", error);

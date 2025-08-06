@@ -1,7 +1,7 @@
 const User = require("../../model/User-model");
 const bcrypt = require("bcryptjs");
-const generateOtp = require("../../utils/generateOTP");
-const sendEmailUtil = require("../../utils/Nodemailerutil");
+const generateOtp = require("../../utils/Generate/generateOTP");
+const sendEmailUtil = require("../../utils/Generate/Nodemailerutil");
 
 //forgetpassword
 exports.forgotPassword = async (req, res) => {
@@ -24,6 +24,7 @@ exports.forgotPassword = async (req, res) => {
       });
     }
 
+    //otp
     const otp = generateOtp();
     const otpExpiresAt = Date.now() + 3 * 60 * 1000; // 3 minutes
 
@@ -31,6 +32,7 @@ exports.forgotPassword = async (req, res) => {
     user.otpExpiresAt = otpExpiresAt;
     await user.save();
 
+    //send mail
     await sendEmailUtil({
       to: user.email,
       subject: "Forget Password OTP",
@@ -54,7 +56,7 @@ exports.forgotPassword = async (req, res) => {
 //reset-password
 exports.resetPassword = async (req, res) => {
   const { email, otp, newPassword } = req.body;
-  console.log("req.body --->/Password-Controller/Reset-password", req.body);
+  // console.log("req.body --->/Password-Controller/Reset-password", req.body);
 
   if (!email || !otp || !newPassword) {
     return res.status(400).json({
@@ -68,7 +70,6 @@ exports.resetPassword = async (req, res) => {
 
     if (!user || !user.otp || user.otp !== otp) {
       return res.status(400).json({
-        success: false,
         status: 400,
         message: "Invalid OTP or user.",
       });
@@ -99,7 +100,7 @@ exports.resetPassword = async (req, res) => {
       message: "Password reset successful.",
     });
   } catch (error) {
-    console.error(
+    console.log(
       "Error in resetPassword:/Password-Controller/Reset-password",
       error
     );

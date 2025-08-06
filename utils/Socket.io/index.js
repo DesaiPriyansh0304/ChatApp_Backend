@@ -4,6 +4,7 @@ const PrivateMessageHandler = require("./privateMessageHandler");
 const GroupMessageHandler = require("./groupMessageHandler");
 const ReadReceiptsHandler = require("./Readhandle");
 const TypingHandler = require("./typingHandler");
+const ChatListHandler = require("./chatListHandler");
 
 let io;
 
@@ -22,6 +23,7 @@ function initSocket(server) {
     const groupMessageHandler = new GroupMessageHandler(io, socket);
     const readReceiptsHandler = new ReadReceiptsHandler(io, socket);
     const typingHandler = new TypingHandler(io, socket);
+    const chatListHandler = new ChatListHandler(io, socket);
 
     // Connection events
     connectionHandler.handleConnection();
@@ -39,6 +41,9 @@ function initSocket(server) {
 
     // Typing events
     typingHandler.handleTyping();
+
+    // 🆕 Chat list events
+    chatListHandler.handleGetChatList();
   });
 }
 

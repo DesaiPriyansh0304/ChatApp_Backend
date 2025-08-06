@@ -76,6 +76,9 @@ class ReadReceiptsHandler {
             conversationId: conversation._id,
           });
         }
+        UnreadCountService.resetUnreadCount(conversation, userObjectId);
+        UnreadCountService.removeUnreadMessages(conversation, userObjectId);
+        await conversation.save();
 
         // Emit updated unread count to current user
         this.socket.emit("unreadCountUpdated", {

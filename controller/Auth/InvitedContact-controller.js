@@ -1,5 +1,5 @@
 const User = require("../../model/User-model");
-const sendEmailUtil = require("../../utils/Nodemailerutil");
+const sendEmailUtil = require("../../utils/Generate/Nodemailerutil");
 const jwt = require("jsonwebtoken");
 
 //verify-inviteduser
@@ -33,65 +33,42 @@ exports.invitedUsersverify = async (req, res) => {
       return res.status(401).json({ success: false, message: msg });
     }
 
-    const invitedUserId = decoded.id;
-    const invitedUser = await User.findById(invitedUserId);
+    const invitedUserEmail = decoded.email; // Token માં email store કરીશું
+    const inviterId = decoded.inviterId; // Token માં inviter ID પણ store કરીશું
 
-    if (!invitedUser) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Invited user not found" });
-    }
-
-    // 🔍 Find inviter who invited this user
-    const inviter = await User.findOne({
-      "invitedUsers.user": invitedUser._id,
-    });
-
+    // 🔍 Find inviter
+    const inviter = await User.findById(inviterId);
     if (!inviter) {
       return res
         .status(404)
         .json({ success: false, message: "Inviter not found" });
     }
 
-    // ✅ 1. Update inviter's invitedUsers[].invited_is_Confirmed = true
-    await User.updateOne(
-      { _id: inviter._id, "invitedUsers.user": invitedUser._id },
-      { $set: { "invitedUsers.$.invited_is_Confirmed": true } }
+    // ✅ Check if this email was actually invited by this inviter
+    const invitedEntry = inviter.invitedUsers.find(
+      (entry) => entry.email.toLowerCase() === invitedUserEmail.toLowerCase()
     );
 
-    // ✅ 2. Update invited user's confirmation flags
-    invitedUser.is_Confirmed = true;
-    invitedUser.invited_is_Confirmed = true;
-
-    // ✅ 3. Prevent duplicate inviter in invitedUser.invitedBy[]
-    if (!Array.isArray(invitedUser.invitedBy)) {
-      invitedUser.invitedBy = [];
-    }
-
-    const alreadyExists = invitedUser.invitedBy.some((entry) => {
-      return (
-        entry._id.toString() === inviter._id.toString() &&
-        entry.email.toLowerCase() === inviter.email.toLowerCase()
-      );
-    });
-
-    if (!alreadyExists) {
-      invitedUser.invitedBy.push({
-        _id: inviter._id,
-        email: inviter.email,
+    if (!invitedEntry) {
+      return res.status(400).json({
+        success: false,
+        message: "This email was not invited by the specified inviter",
       });
     }
 
-    await invitedUser.save();
+    // ✅ Update inviter's invitedUsers[].invited_is_Confirmed = true
+    await User.updateOne(
+      { _id: inviter._id, "invitedUsers.email": invitedUserEmail },
+      { $set: { "invitedUsers.$.invited_is_Confirmed": true } }
+    );
 
     return res.status(200).json({
       success: true,
-      message: "Invitation verified successfully!",
-      invitedUser: {
-        _id: invitedUser._id,
-        email: invitedUser.email,
-        invitedBy: invitedUser.invitedBy,
-        is_Confirmed: invitedUser.is_Confirmed,
+      message: "Invitation verified successfully! You can now register.",
+      data: {
+        email: invitedUserEmail,
+        inviterName: `${inviter.firstname} ${inviter.lastname}`,
+        inviterEmail: inviter.email,
       },
     });
   } catch (error) {
@@ -100,7 +77,7 @@ exports.invitedUsersverify = async (req, res) => {
   }
 };
 
-//invitedUsers
+//invitedUsers - હવે user create નહીં કરશે
 exports.invitedUsers = async (req, res) => {
   try {
     const inviterId = req.user._id;
@@ -113,61 +90,59 @@ exports.invitedUsers = async (req, res) => {
 
     const email = rawEmail.trim().toLowerCase();
 
-    let invitedUser = await User.findOne({ email });
-
-    // Create new invited user if doesn't exist
-    if (!invitedUser) {
-      invitedUser = new User({
-        email,
-        invited_is_Confirmed: false,
-        is_Confirmed: false,
+    // ✅ Check if user already exists with this email
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({
+        message:
+          "User with this email already exists. They can directly login.",
       });
-      await invitedUser.save();
     }
-
-    const token = jwt.sign(
-      { id: invitedUser._id },
-      process.env.JWT_SECRET_KEY,
-      { expiresIn: "7d" }
-    );
-
-    const link = `http://localhost:5173/contact/${token}`;
-
-    await sendEmailUtil({
-      to: email,
-      subject: "You're Invited!",
-      text: `Hi,\n\nYou've been invited to join our chat app.\n\nMessage: ${message}\nClick here to join: ${link}`,
-    });
 
     const inviter = await User.findById(inviterId);
     if (!inviter) {
       return res.status(404).json({ message: "Inviter not found." });
     }
 
-    // Add to inviter's invitedUsers[] only if not already invited
+    // ✅ Check if already invited
     const alreadyInvited = inviter.invitedUsers.some(
-      (entry) =>
-        entry.email === invitedUser.email ||
-        (entry.user && entry.user.toString() === invitedUser._id.toString())
+      (entry) => entry.email.toLowerCase() === email
     );
 
-    if (!alreadyInvited) {
-      inviter.invitedUsers.push({
-        user: invitedUser._id,
-        email: invitedUser.email,
-        invitationMessage: message,
-        invited_is_Confirmed: false,
+    if (alreadyInvited) {
+      return res.status(400).json({
+        message: "This email has already been invited.",
       });
-      await inviter.save();
     }
 
-    // DO NOT add to invitedUser.invitedBy[] here
-    // That will happen in the confirmation controller only
-
-    const updatedInviter = await User.findById(inviterId).populate(
-      "invitedUsers.user",
-      "email is_Confirmed"
+    // ✅ Create JWT token with email and inviter info
+    const token = jwt.sign(
+      {
+        email: email,
+        inviterId: inviterId,
+      },
+      process.env.JWT_SECRET_KEY,
+      { expiresIn: "7d" }
     );
+
+    const link = `http://localhost:5173/contact/${token}`;
+
+    // ✅ Send invitation email
+    await sendEmailUtil({
+      to: email,
+      subject: "You're Invited to join our Chat App!",
+      text: `Hi,\n\nYou've been invited by ${inviter.firstname} ${inviter.lastname} to join our chat app.\n\nMessage: ${message}\n\nClick here to join: ${link}\n\nThis invitation will expire in 7 days.`,
+    });
+
+    // ✅ Add only email to inviter's invitedUsers[] (NO user creation)
+    inviter.invitedUsers.push({
+      email: email,
+      invitationMessage: message,
+      invited_is_Confirmed: false,
+    });
+    await inviter.save();
+
+    const updatedInviter = await User.findById(inviterId);
 
     res.status(200).json({
       message: "Invitation sent successfully.",

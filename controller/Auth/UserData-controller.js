@@ -1,6 +1,6 @@
 const User = require("../../model/User-model");
 // const conrdinary = require("../../utils/Cloudinary");
-const sendEmailUtil = require("../../utils/Nodemailerutil");
+const sendEmailUtil = require("../../utils/Generate/Nodemailerutil");
 const mongoose = require("mongoose");
 const jwt = require("jsonwebtoken");
 

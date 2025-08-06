@@ -1,6 +1,6 @@
 const User = require("../model/User-model");
-const sendEmail = require("../utils/Nodemailerutil");
-const generateOtp = require("../utils/generateOTP");
+const sendEmail = require("../utils/Generate/Nodemailerutil");
+const generateOtp = require("../utils/Generate/generateOTP");
 
 exports.verifyOtp = async (req, res) => {
   try {

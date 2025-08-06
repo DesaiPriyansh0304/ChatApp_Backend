@@ -1,4 +1,4 @@
-const cloudinary = require("../Cloudinary");
+const cloudinary = require("../Generate/Cloudinary");
 
 const convertSizes = (bytesArray) => {
   return bytesArray.map((bytes) => ({

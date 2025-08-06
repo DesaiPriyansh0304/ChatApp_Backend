@@ -371,3 +371,130 @@ exports.leaveGroup = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+exports.Unreadmessage = async (req, res) => {
+  try {
+    const userId = new mongoose.Types.ObjectId(req.user._id);
+    console.log("🔍 Searching for userId:", userId);
+
+    // First, let's get raw data to see what exists
+    const rawConversations = await MessageModel.find({
+      chatType: "private",
+      "userIds.user": userId,
+    }).lean();
+
+    console.log("🔍 Found conversations:", rawConversations.length);
+
+    if (rawConversations.length === 0) {
+      return res.status(200).json({
+        message: "No conversations found for this user",
+        userId: userId,
+      });
+    }
+
+    // Log first conversation structure
+    console.log("🔍 First conversation structure:");
+    console.log("  - _id:", rawConversations[0]._id);
+    console.log("  - userIds:", rawConversations[0].userIds);
+    console.log(
+      "  - unreadMessageCount:",
+      rawConversations[0].unreadMessageCount
+    );
+    console.log(
+      "  - unreadMessages length:",
+      rawConversations[0].unreadMessages?.length || 0
+    );
+
+    // Simple aggregation without complex filtering
+    const conversations = await MessageModel.aggregate([
+      {
+        $match: {
+          chatType: "private",
+          "userIds.user": userId,
+        },
+      },
+      {
+        $addFields: {
+          otherUserId: {
+            $first: {
+              $filter: {
+                input: "$userIds",
+                as: "uid",
+                cond: { $ne: ["$$uid.user", userId] },
+              },
+            },
+          },
+        },
+      },
+      {
+        $lookup: {
+          from: "users",
+          localField: "otherUserId.user",
+          foreignField: "_id",
+          as: "user",
+        },
+      },
+      { $unwind: "$user" },
+      {
+        $project: {
+          user: {
+            _id: 1,
+            firstname: 1,
+            lastname: 1,
+            email: 1,
+            profile_avatar: 1,
+          },
+          // Show raw unread data for debugging
+          rawUnreadMessageCount: "$unreadMessageCount",
+          rawUnreadMessages: "$unreadMessages",
+          // Calculate unread count
+          unreadMessageCount: {
+            $let: {
+              vars: {
+                userCount: {
+                  $arrayElemAt: [
+                    {
+                      $filter: {
+                        input: "$unreadMessageCount",
+                        as: "item",
+                        cond: { $eq: ["$$item.user", userId] },
+                      },
+                    },
+                    0,
+                  ],
+                },
+              },
+              in: { $ifNull: ["$$userCount.count", 0] },
+            },
+          },
+          // Calculate unread messages
+          unreadMessages: {
+            $map: {
+              input: {
+                $filter: {
+                  input: "$unreadMessages",
+                  as: "item",
+                  cond: { $eq: ["$$item.user", userId] },
+                },
+              },
+              as: "unreadItem",
+              in: "$$unreadItem.message",
+            },
+          },
+        },
+      },
+    ]);
+
+    console.log(
+      "🔍 Aggregation result:",
+      JSON.stringify(conversations, null, 2)
+    );
+    res.status(200).json(conversations);
+  } catch (error) {
+    console.error("🔥 Error in Unreadmessage:", error);
+    res.status(500).json({
+      message: "Server Error",
+      error: error.message,
+    });
+  }
+};
