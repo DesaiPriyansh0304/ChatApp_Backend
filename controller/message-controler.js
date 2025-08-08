@@ -211,201 +211,210 @@ exports.getChatHistory = async (req, res) => {
   }
 };
 
-exports.createGroup = async (req, res) => {
+// exports.Unreadmessage = async (req, res) => {
+//   try {
+//     const userId = new mongoose.Types.ObjectId(req.user._id);
+//     console.log("🔍 Searching for userId:", userId);
+
+//     // First, let's get raw data to see what exists
+//     const rawConversations = await MessageModel.find({
+//       chatType: "private",
+//       "userIds.user": userId,
+//     }).lean();
+
+//     console.log("🔍 Found conversations:", rawConversations.length);
+
+//     if (rawConversations.length === 0) {
+//       return res.status(200).json({
+//         message: "No conversations found for this user",
+//         userId: userId,
+//       });
+//     }
+
+//     // Log first conversation structure
+//     console.log("🔍 First conversation structure:");
+//     console.log("  - _id:", rawConversations[0]._id);
+//     console.log("  - userIds:", rawConversations[0].userIds);
+//     console.log(
+//       "  - unreadMessageCount:",
+//       rawConversations[0].unreadMessageCount
+//     );
+//     console.log(
+//       "  - unreadMessages length:",
+//       rawConversations[0].unreadMessages?.length || 0
+//     );
+
+//     // Simple aggregation without complex filtering
+//     const conversations = await MessageModel.aggregate([
+//       {
+//         $match: {
+//           chatType: "private",
+//           "userIds.user": userId,
+//         },
+//       },
+//       {
+//         $addFields: {
+//           otherUserId: {
+//             $first: {
+//               $filter: {
+//                 input: "$userIds",
+//                 as: "uid",
+//                 cond: { $ne: ["$$uid.user", userId] },
+//               },
+//             },
+//           },
+//         },
+//       },
+//       {
+//         $lookup: {
+//           from: "users",
+//           localField: "otherUserId.user",
+//           foreignField: "_id",
+//           as: "user",
+//         },
+//       },
+//       { $unwind: "$user" },
+//       {
+//         $project: {
+//           user: {
+//             _id: 1,
+//             firstname: 1,
+//             lastname: 1,
+//             email: 1,
+//             profile_avatar: 1,
+//           },
+//           // Show raw unread data for debugging
+//           rawUnreadMessageCount: "$unreadMessageCount",
+//           rawUnreadMessages: "$unreadMessages",
+//           // Calculate unread count
+//           unreadMessageCount: {
+//             $let: {
+//               vars: {
+//                 userCount: {
+//                   $arrayElemAt: [
+//                     {
+//                       $filter: {
+//                         input: "$unreadMessageCount",
+//                         as: "item",
+//                         cond: { $eq: ["$$item.user", userId] },
+//                       },
+//                     },
+//                     0,
+//                   ],
+//                 },
+//               },
+//               in: { $ifNull: ["$$userCount.count", 0] },
+//             },
+//           },
+//           // Calculate unread messages
+//           unreadMessages: {
+//             $map: {
+//               input: {
+//                 $filter: {
+//                   input: "$unreadMessages",
+//                   as: "item",
+//                   cond: { $eq: ["$$item.user", userId] },
+//                 },
+//               },
+//               as: "unreadItem",
+//               in: "$$unreadItem.message",
+//             },
+//           },
+//         },
+//       },
+//     ]);
+
+//     console.log(
+//       "🔍 Aggregation result:",
+//       JSON.stringify(conversations, null, 2)
+//     );
+//     res.status(200).json(conversations);
+//   } catch (error) {
+//     console.error("🔥 Error in Unreadmessage:", error);
+//     res.status(500).json({
+//       message: "Server Error",
+//       error: error.message,
+//     });
+//   }
+// };
+
+// Backend Controller - MarkMessagesAsRead
+
+exports.MarkMessagesAsRead = async (req, res) => {
   try {
-    const { groupName, description, members } = req.body;
-    const creatorId = req.user._id;
+    const userId = new mongoose.Types.ObjectId(req.user._id);
+    const { senderId } = req.body; // Frontend માંથી sender ID આવશે
 
-    const newGroup = new MessageModel({
-      chatType: "group",
-      groupName,
-      description,
-      userIds: [
-        {
-          user: creatorId,
-          addedAt: new Date(),
-          role: "admin", // creator is admin
-        },
-        ...members.map((id) => ({
-          user: id,
-          addedAt: new Date(),
-          role: "member", // others are default members
-        })),
-      ],
-      createdBy: creatorId,
-      messages: [],
-    });
+    console.log("🔍 Current User ID:", userId);
+    console.log("🔍 Sender ID to mark as read:", senderId);
 
-    newGroup.groupId = newGroup._id;
-    await newGroup.save();
-
-    const populatedGroup = await newGroup.populate(
-      "createdBy",
-      "firstname lastname email"
-    );
-
-    return res.status(201).json({
-      success: true,
-      message: "Group created successfully",
-      group: populatedGroup,
-    });
-  } catch (error) {
-    console.error("❌ Group creation error:", error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-//grop find in user
-exports.getUserGroups = async (req, res) => {
-  try {
-    const groups = await MessageModel.find({ chatType: "group" })
-      .select("-messages") // optional: exclude messages
-      .populate({
-        path: "createdBy",
-        select: "_id firstname lastname email",
-      })
-      .populate({
-        path: "userIds.user",
-        model: "User",
-        select: "_id firstname lastname email",
+    if (!senderId) {
+      return res.status(400).json({
+        message: "Sender ID is required",
       });
-
-    res.json({
-      success: true,
-      groups,
-    });
-  } catch (err) {
-    console.error("❌ Error:", err);
-    res.status(500).json({ success: false, message: "Server error" });
-  }
-};
-
-//ADD Member
-exports.GroupAddmember = async (req, res) => {
-  try {
-    const { groupId, newMemberIds } = req.body;
-    const requesterId = req.user._id;
-
-    const group = await MessageModel.findById(groupId);
-    if (!group) return res.status(404).json({ message: "Group not found" });
-
-    const requester = group.userIds.find(
-      (u) => u.user.toString() === requesterId.toString()
-    );
-
-    if (!requester || !["admin", "subadmin"].includes(requester.role)) {
-      return res.status(403).json({ message: "Permission denied" });
     }
 
-    const newMembers = newMemberIds.map((id) => ({
-      user: id,
-      addedAt: new Date(),
-      role: "member",
-    }));
+    const senderObjectId = new mongoose.Types.ObjectId(senderId);
 
-    group.userIds.push(...newMembers);
-    await group.save();
-
-    res.status(200).json({ message: "Members added", group });
-  } catch (err) {
-    console.error("Add member error:", err);
-    res.status(500).json({ message: err.message });
-  }
-};
-
-//Delete Group
-exports.deleteGroup = async (req, res) => {
-  try {
-    const { groupId } = req.body;
-    const userId = req.user._id;
-
-    const group = await MessageModel.findById(groupId);
-    if (!group) return res.status(404).json({ message: "Group not found" });
-
-    const isAdmin = group.userIds.find(
-      (u) => u.user.toString() === userId.toString() && u.role === "admin"
-    );
-
-    if (!isAdmin) {
-      return res.status(403).json({ message: "Only admin can delete group" });
-    }
-
-    await MessageModel.findByIdAndDelete(groupId);
-    res.status(200).json({ message: "Group deleted successfully" });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-//leave Group
-exports.leaveGroup = async (req, res) => {
-  try {
-    const { groupId } = req.body;
-    const userId = req.user._id;
-
-    const group = await MessageModel.findById(groupId);
-    if (!group) return res.status(404).json({ message: "Group not found" });
-
-    const currentUser = group.userIds.find(
-      (u) => u.user.toString() === userId.toString()
-    );
-
-    if (!currentUser) {
-      return res.status(403).json({ message: "User not in group" });
-    }
-
-    // Block admin from leaving directly
-    if (currentUser.role === "admin") {
-      return res
-        .status(403)
-        .json({ message: "Admin cannot leave group directly" });
-    }
-
-    // Remove user from group
-    await MessageModel.findByIdAndUpdate(groupId, {
-      $pull: { userIds: { user: userId } },
+    // Find conversation between current user and sender
+    const conversation = await MessageModel.findOne({
+      chatType: "private",
+      "userIds.user": { $all: [userId, senderObjectId] },
     });
 
-    res.status(200).json({ message: "Left group successfully" });
+    if (!conversation) {
+      return res.status(404).json({
+        message: "Conversation not found",
+      });
+    }
+
+    // Update conversation to mark messages as read
+    const updateResult = await MessageModel.updateOne(
+      {
+        _id: conversation._id,
+        chatType: "private",
+        "userIds.user": { $all: [userId, senderObjectId] },
+      },
+      {
+        // Remove current user's unread message count entry
+        $pull: {
+          unreadMessageCount: { user: userId },
+          unreadMessages: { user: userId },
+        },
+      }
+    );
+
+    console.log("✅ Update Result:", updateResult);
+
+    if (updateResult.modifiedCount > 0) {
+      res.status(200).json({
+        success: true,
+        message: "Messages marked as read successfully",
+        modifiedCount: updateResult.modifiedCount,
+      });
+    } else {
+      res.status(200).json({
+        success: true,
+        message: "No unread messages to mark as read",
+        modifiedCount: 0,
+      });
+    }
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("🔥 Error in MarkMessagesAsRead:", error);
+    res.status(500).json({
+      message: "Server Error",
+      error: error.message,
+    });
   }
 };
 
+// Updated Unreadmessage controller
 exports.Unreadmessage = async (req, res) => {
   try {
     const userId = new mongoose.Types.ObjectId(req.user._id);
     console.log("🔍 Searching for userId:", userId);
 
-    // First, let's get raw data to see what exists
-    const rawConversations = await MessageModel.find({
-      chatType: "private",
-      "userIds.user": userId,
-    }).lean();
-
-    console.log("🔍 Found conversations:", rawConversations.length);
-
-    if (rawConversations.length === 0) {
-      return res.status(200).json({
-        message: "No conversations found for this user",
-        userId: userId,
-      });
-    }
-
-    // Log first conversation structure
-    console.log("🔍 First conversation structure:");
-    console.log("  - _id:", rawConversations[0]._id);
-    console.log("  - userIds:", rawConversations[0].userIds);
-    console.log(
-      "  - unreadMessageCount:",
-      rawConversations[0].unreadMessageCount
-    );
-    console.log(
-      "  - unreadMessages length:",
-      rawConversations[0].unreadMessages?.length || 0
-    );
-
-    // Simple aggregation without complex filtering
+    // Simple aggregation to get unread messages
     const conversations = await MessageModel.aggregate([
       {
         $match: {
@@ -444,10 +453,7 @@ exports.Unreadmessage = async (req, res) => {
             email: 1,
             profile_avatar: 1,
           },
-          // Show raw unread data for debugging
-          rawUnreadMessageCount: "$unreadMessageCount",
-          rawUnreadMessages: "$unreadMessages",
-          // Calculate unread count
+          // Calculate unread count for current user
           unreadMessageCount: {
             $let: {
               vars: {
@@ -467,7 +473,7 @@ exports.Unreadmessage = async (req, res) => {
               in: { $ifNull: ["$$userCount.count", 0] },
             },
           },
-          // Calculate unread messages
+          // Get unread messages for current user
           unreadMessages: {
             $map: {
               input: {
@@ -483,12 +489,15 @@ exports.Unreadmessage = async (req, res) => {
           },
         },
       },
+      // Only return conversations with unread messages
+      {
+        $match: {
+          unreadMessageCount: { $gt: 0 },
+        },
+      },
     ]);
 
-    console.log(
-      "🔍 Aggregation result:",
-      JSON.stringify(conversations, null, 2)
-    );
+    console.log("🔍 Unread conversations found:", conversations.length);
     res.status(200).json(conversations);
   } catch (error) {
     console.error("🔥 Error in Unreadmessage:", error);

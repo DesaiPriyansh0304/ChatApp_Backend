@@ -1,6 +1,6 @@
 const Joi = require("joi");
 
-const passwordPattern = new RegExp("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d).{6,}$");
+// const passwordPattern = new RegExp("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d).{6,}$");
 const mobilePattern = /^\d{10}$/;
 
 const userValidationSchema = Joi.object({
@@ -34,9 +34,8 @@ const userValidationSchema = Joi.object({
     "any.required": "Gender is required",
   }),
 
-  password: Joi.string().pattern(passwordPattern).required().messages({
-    "string.pattern.base":
-      "Password must have at least 6 characters, including uppercase, lowercase, and a number",
+  password: Joi.string().min(6).required().messages({
+    "string.min": "Password must be at least 6 characters",
     "any.required": "Password is required",
   }),
 

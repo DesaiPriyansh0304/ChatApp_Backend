@@ -112,14 +112,77 @@ exports.Register = async (req, res) => {
 //Login Controller
 exports.Login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, recaptcha } = req.body;
+
+    // Validate required fields
+    if (!email || !password) {
+      return res.status(400).json({
+        status: 400,
+        message: "Email and password are required.",
+      });
+    }
+
+    // Validate reCAPTCHA
+    if (!recaptcha) {
+      return res.status(400).json({
+        status: 400,
+        message: "Please complete the reCAPTCHA verification.",
+      });
+    }
+
+    // Verify reCAPTCHA with Google
+    try {
+      const recaptchaSecret =
+        process.env.RECAPTCHA_SECRET_KEY ||
+        "6LcBV50rAAAAAOueCc8LqUmd6HHT8IeGRP4jcsQ-";
+
+      const recaptchaResponse = await axios.post(
+        "https://www.google.com/recaptcha/api/siteverify",
+        null,
+        {
+          params: {
+            secret: recaptchaSecret,
+            response: recaptcha,
+            remoteip: req.ip || req.connection.remoteAddress,
+          },
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+        }
+      );
+
+      const recaptchaData = recaptchaResponse.data;
+      console.log("reCAPTCHA verification result:", recaptchaData);
+
+      if (!recaptchaData.success) {
+        return res.status(400).json({
+          status: 400,
+          message: "reCAPTCHA verification failed. Please try again.",
+          recaptchaError: recaptchaData["error-codes"] || [],
+        });
+      }
+
+      // Optional: Check score for reCAPTCHA v3 (if you upgrade later)
+      if (recaptchaData.score && recaptchaData.score < 0.5) {
+        return res.status(400).json({
+          status: 400,
+          message: "reCAPTCHA verification failed. Please try again.",
+        });
+      }
+    } catch (recaptchaError) {
+      console.error("reCAPTCHA verification error:", recaptchaError);
+      return res.status(500).json({
+        status: 500,
+        message: "reCAPTCHA verification failed. Please try again later.",
+      });
+    }
 
     // Check if user exists
     const userExist = await User.findOne({ email });
     if (!userExist) {
       return res.status(400).json({
         status: 400,
-        message: "Email/User Not Valid.",
+        message: "User not found with this email.",
       });
     }
 
@@ -137,19 +200,25 @@ exports.Login = async (req, res) => {
     if (!isMatch) {
       return res.status(400).json({
         status: 400,
-        message: "Invalid Password.",
+        message: "Invalid password.",
       });
     }
 
     // Successful login response
     res.status(200).json({
       status: 200,
-      //   userData: userExist,
+      message: "Login successful",
       token: generateToken(userExist),
-      //   userId: userExist._id.toString(),
+      userData: {
+        id: userExist._id,
+        email: userExist.email,
+        firstname: userExist.firstname,
+        lastname: userExist.lastname,
+        // Add other non-sensitive user data as needed
+      },
     });
   } catch (error) {
-    console.log("Login Error:", error);
+    console.error("Login Error:", error);
     res.status(500).json({
       status: 500,
       success: false,
