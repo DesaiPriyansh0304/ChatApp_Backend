@@ -1,15 +1,14 @@
 const User = require("../../model/User-model");
-// const conrdinary = require("../../utils/Cloudinary");
-const sendEmailUtil = require("../../utils/Generate/Nodemailerutil");
 const mongoose = require("mongoose");
-const jwt = require("jsonwebtoken");
 
 // controller to checked if user is authnticated
 exports.checkAuth = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    const user = await User.findById(userId).select("-password -otp");
+    const user = await User.findById(userId).select(
+      "-password -otp -otpExpiresAt"
+    );
     if (!user) {
       return res.status(404).json({
         status: 404,
@@ -19,11 +18,11 @@ exports.checkAuth = async (req, res) => {
 
     res.status(200).json({
       status: 200,
-      message: "User authenticated",
+      // message: "User authenticated",
       user,
     });
   } catch (err) {
-    console.error("🔴 Error in checkAuth:/Userdata-Controller", err.message);
+    console.log("🔴 Error in checkAuth:/Userdata-Controller", err.message);
     res.status(500).json({
       message: "Server Error",
     });

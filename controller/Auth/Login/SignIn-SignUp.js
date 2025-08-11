@@ -1,4 +1,4 @@
-const User = require("../../../model/User-model");
+const UserModel = require("../../../model/User-model");
 const bcrypt = require("bcryptjs");
 const generateToken = require("../../../utils/Generate/generateToken");
 const generateOtp = require("../../../utils/Generate/generateOTP");
@@ -19,9 +19,9 @@ const {
 exports.Register = async (req, res) => {
   try {
     //validation input filed
-    const validatedData = await userValidationSchema.validateAsync(req.body, {
-      abortEarly: false,
-    });
+    // const validatedData = await userValidationSchema.validateAsync(req.body, {
+    //   abortEarly: false,
+    // });
 
     const {
       firstname,
@@ -32,10 +32,10 @@ exports.Register = async (req, res) => {
       gender,
       password,
       profile_avatar,
-    } = validatedData;
+    } = req.body;
 
     // Check if user already exists
-    const userExist = await User.findOne({ email });
+    const userExist = await UserModel.findOne({ email });
     if (userExist) {
       return res.status(400).json({
         status: 400,
@@ -53,7 +53,7 @@ exports.Register = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, salt);
 
     // Create user
-    const userCreated = await User.create({
+    const userCreated = await UserModel.create({
       firstname,
       lastname,
       email,
@@ -114,11 +114,18 @@ exports.Login = async (req, res) => {
   try {
     const { email, password, recaptcha } = req.body;
 
-    // Validate required fields
-    if (!email || !password) {
+    // Validate required fields (email+password)
+    if (!email) {
       return res.status(400).json({
         status: 400,
-        message: "Email and password are required.",
+        message: "Email are required.",
+      });
+    }
+
+    if (!password) {
+      return res.status(400).json({
+        status: 400,
+        message: "Password are required.",
       });
     }
 
@@ -132,9 +139,8 @@ exports.Login = async (req, res) => {
 
     // Verify reCAPTCHA with Google
     try {
-      const recaptchaSecret =
-        process.env.RECAPTCHA_SECRET_KEY ||
-        "6LcBV50rAAAAAOueCc8LqUmd6HHT8IeGRP4jcsQ-";
+      //recaptcha Secret key
+      const recaptchaSecret = "6LcBV50rAAAAAOueCc8LqUmd6HHT8IeGRP4jcsQ-";
 
       const recaptchaResponse = await axios.post(
         "https://www.google.com/recaptcha/api/siteverify",
@@ -152,7 +158,7 @@ exports.Login = async (req, res) => {
       );
 
       const recaptchaData = recaptchaResponse.data;
-      console.log("reCAPTCHA verification result:", recaptchaData);
+      // console.log("reCAPTCHA verification result:", recaptchaData);
 
       if (!recaptchaData.success) {
         return res.status(400).json({
@@ -170,7 +176,7 @@ exports.Login = async (req, res) => {
         });
       }
     } catch (recaptchaError) {
-      console.error("reCAPTCHA verification error:", recaptchaError);
+      console.log("reCAPTCHA verification error:", recaptchaError);
       return res.status(500).json({
         status: 500,
         message: "reCAPTCHA verification failed. Please try again later.",
@@ -178,7 +184,7 @@ exports.Login = async (req, res) => {
     }
 
     // Check if user exists
-    const userExist = await User.findOne({ email });
+    const userExist = await UserModel.findOne({ email });
     if (!userExist) {
       return res.status(400).json({
         status: 400,
@@ -209,19 +215,17 @@ exports.Login = async (req, res) => {
       status: 200,
       message: "Login successful",
       token: generateToken(userExist),
-      userData: {
-        id: userExist._id,
-        email: userExist.email,
-        firstname: userExist.firstname,
-        lastname: userExist.lastname,
-        // Add other non-sensitive user data as needed
-      },
+      // userData: {
+      //   id: userExist._id,
+      //   email: userExist.email,
+      //   firstname: userExist.firstname,
+      //   lastname: userExist.lastname,
+      // },
     });
   } catch (error) {
-    console.error("Login Error:", error);
+    console.log("Login Error:", error);
     res.status(500).json({
       status: 500,
-      success: false,
       message: "Internal server error during login.",
     });
   }
@@ -264,11 +268,11 @@ exports.googlelogin = async (req, res) => {
     }
 
     // Check if user exists
-    let user = await User.findOne({ email });
+    let user = await UserModel.findOne({ email });
 
     if (!user) {
       // Create new user if doesn't exist
-      user = await User.create({
+      user = await UserModel.create({
         firstname: given_name || name?.split(" ")[0] || "Google",
         lastname: family_name || name?.split(" ")[1] || "User",
         email: email,
@@ -345,8 +349,17 @@ exports.githublogin = async (req, res) => {
       });
     }
 
-    // console.log("GitHub OAuth Code received/Github Login:", code);
-    // console.log("Redirect URI received/Github Login:", redirect_uri);
+    // Check if environment variables are set
+    if (!GITHUB_CLIENT_ID || !GITHUB_CLIENT_SECRET) {
+      console.error("GitHub OAuth credentials not configured");
+      return res.status(500).json({
+        status: 500,
+        message: "GitHub OAuth not configured properly",
+      });
+    }
+
+    console.log("GitHub OAuth Code received:", code);
+    console.log("Redirect URI received:", redirect_uri);
 
     // Step 1: Exchange code for access token
     const tokenRequestData = {
@@ -360,6 +373,11 @@ exports.githublogin = async (req, res) => {
       tokenRequestData.redirect_uri = redirect_uri;
     }
 
+    console.log("Token request data:", {
+      ...tokenRequestData,
+      client_secret: "[HIDDEN]",
+    });
+
     const tokenResponse = await axios.post(GITHUB_TOKEN_URL, tokenRequestData, {
       headers: {
         Accept: "application/json",
@@ -367,7 +385,8 @@ exports.githublogin = async (req, res) => {
       },
     });
 
-    // console.log("GitHub token response/Github Login:", tokenResponse.data);
+    // console.log("GitHub token response status:", tokenResponse.status);
+    // console.log("GitHub token response data:", tokenResponse.data);
 
     const { access_token, error, error_description } = tokenResponse.data;
 
@@ -389,7 +408,7 @@ exports.githublogin = async (req, res) => {
       },
     });
 
-    // console.log("GitHub user data/Github Login:", userResponse.data);
+    console.log("GitHub user data received successfully");
 
     const {
       id: githubId,
@@ -415,9 +434,9 @@ exports.githublogin = async (req, res) => {
         const primaryEmail = emailResponse.data.find((email) => email.primary);
         userEmail = primaryEmail ? primaryEmail.email : null;
 
-        // console.log("GitHub emails/Github Login:", emailResponse.data);
+        console.log("GitHub emails fetched successfully");
       } catch (emailError) {
-        console.log("Could not fetch email/Github Login:", emailError.message);
+        console.log("Could not fetch email:", emailError.message);
       }
     }
 
@@ -430,7 +449,7 @@ exports.githublogin = async (req, res) => {
     }
 
     // Step 4: Check if user exists
-    let user = await User.findOne({ email: userEmail });
+    let user = await UserModel.findOne({ email: userEmail });
 
     if (!user) {
       // Create new user if doesn't exist
@@ -438,43 +457,61 @@ exports.githublogin = async (req, res) => {
       const firstname = nameParts[0] || "GitHub";
       const lastname = nameParts.slice(1).join(" ") || "User";
 
-      user = await User.create({
+      // Create user data object with proper mobile field handling
+      const userData = {
         firstname: firstname,
         lastname: lastname,
         email: userEmail,
-        mobile: "",
-        dob: new Date(),
-        gender: "other",
-        password: "github_oauth",
+        mobile: "0000000000", // Default mobile number for GitHub users
+        dob: new Date(), // Default date of birth
+        gender: "other", // Default gender
+        password: "github_oauth", // OAuth password placeholder
         profile_avatar: avatar_url || "",
-        is_Confirmed: true,
-        github_id: githubId,
+        is_Confirmed: true, // GitHub users are pre-confirmed
+        github_id: githubId.toString(), // Store GitHub ID as string
+      };
+
+      console.log("Creating new user with data:", {
+        ...userData,
+        password: "[HIDDEN]",
       });
 
-      //   console.log("New user created/Github Login:", user);
+      user = await UserModel.create(userData);
+      console.log("New user created for GitHub login");
     } else {
       // Update existing user's profile picture and GitHub ID if available
       let updated = false;
 
-      if (avatar_url && !user.profile_avatar) {
+      if (avatar_url && (!user.profile_avatar || user.profile_avatar === "")) {
         user.profile_avatar = avatar_url;
         updated = true;
       }
 
       if (githubId && !user.github_id) {
-        user.github_id = githubId;
+        user.github_id = githubId.toString(); // Ensure it's a string
+        updated = true;
+      }
+
+      // Make sure mobile field has a value if it's empty
+      if (!user.mobile || user.mobile === "") {
+        user.mobile = "0000000000"; // Default mobile for existing users
         updated = true;
       }
 
       if (updated) {
         await user.save();
+        console.log("Existing user updated for GitHub login");
+      } else {
+        console.log("Existing user found, no updates needed");
       }
-
-      //   console.log("Existing user found/Github Login:", user);
     }
 
     // Step 5: Generate token and send response
     const token = generateToken(user);
+
+    if (!token) {
+      throw new Error("Failed to generate authentication token");
+    }
 
     // Successful GitHub login response
     res.status(200).json({
@@ -490,13 +527,16 @@ exports.githublogin = async (req, res) => {
       token: token,
       userId: user._id.toString(),
     });
+
+    console.log("GitHub login completed successfully for user:", user.email);
   } catch (error) {
-    console.log("GitHub Login Error/Github Login:", error);
+    console.error("GitHub Login Error:", error);
+    console.error("Error stack:", error.stack);
 
     // Better error handling
     if (error.response) {
-      //   console.log("GitHub API Error/Github Login:", error.response.data);
-      //   console.log("GitHub API Status/Github Login:", error.response.status);
+      console.error("GitHub API Error Data:", error.response.data);
+      console.error("GitHub API Status:", error.response.status);
 
       // Handle specific GitHub API errors
       if (error.response.status === 401) {
@@ -514,6 +554,13 @@ exports.githublogin = async (req, res) => {
         });
       }
 
+      if (error.response.status === 404) {
+        return res.status(400).json({
+          status: 400,
+          message: "GitHub API endpoint not found. Please check configuration.",
+        });
+      }
+
       return res.status(400).json({
         status: 400,
         message: "GitHub authentication failed. Please try again.",
@@ -521,9 +568,58 @@ exports.githublogin = async (req, res) => {
       });
     }
 
+    // Handle network errors
+    if (error.code === "ENOTFOUND" || error.code === "ECONNREFUSED") {
+      return res.status(500).json({
+        status: 500,
+        message: "Network error. Please check your internet connection.",
+      });
+    }
+
+    // Handle database/validation errors
+    if (error.name === "ValidationError") {
+      console.error("Mongoose validation error:", error.message);
+
+      // Extract validation error details
+      const validationErrors = Object.keys(error.errors).map((key) => {
+        return `${key}: ${error.errors[key].message}`;
+      });
+
+      return res.status(500).json({
+        status: 500,
+        message: `Database validation error: ${validationErrors.join(", ")}`,
+        ...(process.env.NODE_ENV === "development" && {
+          error: error.message,
+          validationDetails: validationErrors,
+        }),
+      });
+    }
+
+    if (error.name === "MongoError" || error.name === "MongoServerError") {
+      console.error("MongoDB error:", error.message);
+      return res.status(500).json({
+        status: 500,
+        message: "Database connection error. Please try again later.",
+      });
+    }
+
+    // Handle duplicate email errors
+    if (error.code === 11000) {
+      console.error("Duplicate key error:", error.message);
+      return res.status(400).json({
+        status: 400,
+        message: "An account with this email already exists.",
+      });
+    }
+
+    // Generic server error
     res.status(500).json({
       status: 500,
       message: "Internal server error. Please try again later.",
+      ...(process.env.NODE_ENV === "development" && {
+        error: error.message,
+        stack: error.stack,
+      }),
     });
   }
 };
