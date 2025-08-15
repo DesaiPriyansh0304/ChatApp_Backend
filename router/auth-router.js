@@ -1,11 +1,12 @@
 const express = require("express");
 const router = express.Router();
+const UserMiddleware = require("../middelware/User-middelware");
 const AuthController = require("../controller/auth-control");
 const LoginContrroller = require("../controller/Auth/Login/SignIn-SignUp");
-const UserMiddleware = require("../middelware/User-middelware");
 const passwordrouter = require("../router/Auth/Password-router");
 const userdatarouter = require("../router/Auth/UserData-router");
 const invitecontactrouter = require("../router/Auth/InvitedContact-router");
+
 router.use("/invite", invitecontactrouter);
 router.use("/password", passwordrouter);
 router.use("/userdata", userdatarouter);
@@ -18,7 +19,6 @@ router.post("/github", LoginContrroller.githublogin);
 
 //Update-Profile
 router.put("/update-profile", UserMiddleware, AuthController.updateProfile);
-
 //favoriteItem
 router.post("/favorite", UserMiddleware, AuthController.favorite);
 
