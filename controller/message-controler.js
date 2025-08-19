@@ -412,46 +412,34 @@ exports.MarkMessagesAsRead = async (req, res) => {
 exports.Unreadmessage = async (req, res) => {
   try {
     const userId = new mongoose.Types.ObjectId(req.user._id);
-    console.log("🔍 Searching for userId:", userId);
+    // console.log("🔍 Searching for unread messages for userId:", userId);
 
-    // Simple aggregation to get unread messages
+    // ✅ Enhanced aggregation to handle both private and group chats
     const conversations = await MessageModel.aggregate([
       {
         $match: {
-          chatType: "private",
           "userIds.user": userId,
+          // Match both private and group chats
+          $or: [{ chatType: "private" }, { chatType: "group" }],
         },
       },
       {
         $addFields: {
+          // For private chats, get the other user
           otherUserId: {
-            $first: {
-              $filter: {
-                input: "$userIds",
-                as: "uid",
-                cond: { $ne: ["$$uid.user", userId] },
+            $cond: {
+              if: { $eq: ["$chatType", "private"] },
+              then: {
+                $first: {
+                  $filter: {
+                    input: "$userIds",
+                    as: "uid",
+                    cond: { $ne: ["$$uid.user", userId] },
+                  },
+                },
               },
+              else: null,
             },
-          },
-        },
-      },
-      {
-        $lookup: {
-          from: "users",
-          localField: "otherUserId.user",
-          foreignField: "_id",
-          as: "user",
-        },
-      },
-      { $unwind: "$user" },
-      {
-        $project: {
-          user: {
-            _id: 1,
-            firstname: 1,
-            lastname: 1,
-            email: 1,
-            profile_avatar: 1,
           },
           // Calculate unread count for current user
           unreadMessageCount: {
@@ -489,16 +477,121 @@ exports.Unreadmessage = async (req, res) => {
           },
         },
       },
+      {
+        // Lookup user details for private chats
+        $lookup: {
+          from: "users",
+          localField: "otherUserId.user",
+          foreignField: "_id",
+          as: "privateUser",
+        },
+      },
+      {
+        // Lookup group details for group chats
+        $lookup: {
+          from: "groups",
+          localField: "groupId",
+          foreignField: "_id",
+          as: "groupDetails",
+        },
+      },
+      {
+        $addFields: {
+          // Prepare user/group info based on chat type
+          chatInfo: {
+            $cond: {
+              if: { $eq: ["$chatType", "private"] },
+              then: {
+                $arrayElemAt: ["$privateUser", 0],
+              },
+              else: {
+                $arrayElemAt: ["$groupDetails", 0],
+              },
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          _id: 1,
+          chatType: 1,
+          groupId: 1,
+          // For private chats, show user info
+          user: {
+            $cond: {
+              if: { $eq: ["$chatType", "private"] },
+              then: {
+                _id: "$chatInfo._id",
+                firstname: "$chatInfo.firstname",
+                lastname: "$chatInfo.lastname",
+                email: "$chatInfo.email",
+                profile_avatar: "$chatInfo.profile_avatar",
+              },
+              else: null,
+            },
+          },
+          // For group chats, show group info
+          group: {
+            $cond: {
+              if: { $eq: ["$chatType", "group"] },
+              then: {
+                _id: "$chatInfo._id",
+                groupName: "$chatInfo.groupName",
+                groupAvatar: "$chatInfo.groupAvatar",
+                description: "$chatInfo.description",
+              },
+              else: null,
+            },
+          },
+          unreadMessageCount: 1,
+          unreadMessages: 1,
+          updatedAt: 1,
+        },
+      },
       // Only return conversations with unread messages
       {
         $match: {
           unreadMessageCount: { $gt: 0 },
         },
       },
+      // Sort by most recent activity
+      {
+        $sort: { updatedAt: -1 },
+      },
     ]);
 
-    console.log("🔍 Unread conversations found:", conversations.length);
-    res.status(200).json(conversations);
+    console.log("🔍 Unread conversations found:", {
+      total: conversations.length,
+      private: conversations.filter((c) => c.chatType === "private").length,
+      group: conversations.filter((c) => c.chatType === "group").length,
+    });
+
+    // ✅ Enhanced response format
+    const formattedConversations = conversations.map((conv) => {
+      if (conv.chatType === "private") {
+        return {
+          ...conv,
+          type: "private",
+          chatId: conv.user?._id,
+          name: conv.user
+            ? `${conv.user.firstname || ""} ${
+                conv.user.lastname || ""
+              }`.trim() || conv.user.email
+            : "Unknown User",
+          avatar: conv.user?.profile_avatar || null,
+        };
+      } else {
+        return {
+          ...conv,
+          type: "group",
+          chatId: conv.group?._id,
+          name: conv.group?.groupName || "Unknown Group",
+          avatar: conv.group?.groupAvatar || null,
+        };
+      }
+    });
+
+    res.status(200).json(formattedConversations);
   } catch (error) {
     console.error("🔥 Error in Unreadmessage:", error);
     res.status(500).json({
