@@ -31,7 +31,7 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    isadmin: {
+    isAdmin: {
       type: Boolean,
       default: false,
     },
@@ -61,7 +61,7 @@ const userSchema = new mongoose.Schema(
     ],
     invitedBy: [
       {
-        _id: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
         email: { type: String },
       },
     ],

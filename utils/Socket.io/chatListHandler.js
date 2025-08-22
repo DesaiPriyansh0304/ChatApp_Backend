@@ -132,10 +132,10 @@ class ChatListHandler {
         },
       ]);
 
-      console.log(
-        "🔍 Aggregation result:",
-        JSON.stringify(aggregationResult, null, 2)
-      );
+      // console.log(
+      //   "🔍 Aggregation result:",
+      //   JSON.stringify(aggregationResult, null, 2)
+      // );
 
       const chatList = [];
 

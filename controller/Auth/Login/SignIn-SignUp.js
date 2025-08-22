@@ -113,6 +113,7 @@ exports.Register = async (req, res) => {
 exports.Login = async (req, res) => {
   try {
     const { email, password, recaptcha } = req.body;
+    // console.log("req.body --->Login", req.body);
 
     // Validate required fields (email+password)
     if (!email) {
@@ -129,7 +130,7 @@ exports.Login = async (req, res) => {
       });
     }
 
-    // Validate reCAPTCHA
+    // Validate reCAPTCHA(Google reCAPTCHA)
     if (!recaptcha) {
       return res.status(400).json({
         status: 400,
@@ -140,7 +141,7 @@ exports.Login = async (req, res) => {
     // Verify reCAPTCHA with Google
     try {
       //recaptcha Secret key
-      const recaptchaSecret = "6LcBV50rAAAAAOueCc8LqUmd6HHT8IeGRP4jcsQ-";
+      const recaptchaSecret = process.env.reCAPTCHA_SECRET_KEY;
 
       const recaptchaResponse = await axios.post(
         "https://www.google.com/recaptcha/api/siteverify",
@@ -213,14 +214,7 @@ exports.Login = async (req, res) => {
     // Successful login response
     res.status(200).json({
       status: 200,
-      message: "Login successful",
       token: generateToken(userExist),
-      // userData: {
-      //   id: userExist._id,
-      //   email: userExist.email,
-      //   firstname: userExist.firstname,
-      //   lastname: userExist.lastname,
-      // },
     });
   } catch (error) {
     console.log("Login Error:", error);

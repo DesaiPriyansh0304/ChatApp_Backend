@@ -1,15 +1,25 @@
-const User = require("../../model/User-model");
+const UserModel = require("../../model/User-model");
 const mongoose = require("mongoose");
 
-// controller to checked if user is authnticated
+// controller to checked if user is authnticated(Login User)
 exports.checkAuth = async (req, res) => {
   try {
-    const userId = req.user._id;
+    if (!req.user || !req.user.userId) {
+      return res.status(401).json({
+        status: 401,
+        message: "Unauthorized User",
+      });
+    }
 
-    const user = await User.findById(userId).select(
-      "-password -otp -otpExpiresAt"
+    const userId = req.user.userId;
+    // console.log("userId --->userdata/chakeAuth", userId);
+
+    const userData = await UserModel.findById(userId).select(
+      "-password -otp -otpExpiresAt "
     );
-    if (!user) {
+    // console.log("userData-->userdata/checkauth", userData);
+
+    if (!userData) {
       return res.status(404).json({
         status: 404,
         message: "User not found",
@@ -18,11 +28,10 @@ exports.checkAuth = async (req, res) => {
 
     res.status(200).json({
       status: 200,
-      // message: "User authenticated",
-      user,
+      userData,
     });
-  } catch (err) {
-    console.log("🔴 Error in checkAuth:/Userdata-Controller", err.message);
+  } catch (error) {
+    console.log("Error in checkAuth:/Userdata-Controller", error.message);
     res.status(500).json({
       message: "Server Error",
     });
@@ -32,7 +41,7 @@ exports.checkAuth = async (req, res) => {
 //get all user data
 exports.GetAlluserData = async (req, res) => {
   try {
-    const users = await User.find({}, "-password");
+    const users = await UserModel.find({}, "-password");
     res.status(200).json({ success: true, users });
   } catch (error) {
     console.error("Login Error:", error);
@@ -45,7 +54,7 @@ exports.getdbUserdata = async (req, res) => {
   try {
     const loginUserId = req.user._id.toString();
 
-    const loginUser = await User.findById(loginUserId).select(
+    const loginUser = await UserModel.findById(loginUserId).select(
       "invitedUsers invitedBy"
     );
 
@@ -83,7 +92,7 @@ exports.getdbUserdata = async (req, res) => {
       ];
     }
 
-    const otherUsers = await User.find(filter).select(
+    const otherUsers = await UserModel.find(filter).select(
       "-password -otp -otpExpiresAt"
     );
 
@@ -107,7 +116,7 @@ exports.getinvitedByUser = async (req, res) => {
   try {
     const searchQuery = (req.query.search || "").toLowerCase();
 
-    const user = await User.findById(req.user._id).select("-password");
+    const user = await UserModel.findById(req.user.userId).select("-password");
 
     if (!user) {
       return res.status(404).json({
@@ -120,7 +129,7 @@ exports.getinvitedByUser = async (req, res) => {
     let invitedByUsers = await Promise.all(
       (user.invitedBy || []).map(async (inviter) => {
         if (inviter._id && mongoose.Types.ObjectId.isValid(inviter._id)) {
-          return await User.findById(inviter._id).select(
+          return await UserModel.findById(inviter._id).select(
             "firstname lastname email profile_avatar bio gender mobile dob isadmin is_Confirmed"
           );
         }
@@ -150,7 +159,7 @@ exports.getinvitedByUser = async (req, res) => {
           invitedUser.user &&
           mongoose.Types.ObjectId.isValid(invitedUser.user)
         ) {
-          populatedUser = await User.findById(invitedUser.user).select(
+          populatedUser = await UserModel.findById(invitedUser.user).select(
             "firstname lastname email profile_avatar bio is_Confirmed gender mobile dob isadmin"
           );
         }
@@ -181,7 +190,6 @@ exports.getinvitedByUser = async (req, res) => {
 
     return res.status(200).json({
       status: 200,
-      message: "User and invitation data fetched successfully.",
       data: {
         user: {
           _id: user._id,
