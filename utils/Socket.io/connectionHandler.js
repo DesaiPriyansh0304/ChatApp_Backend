@@ -24,31 +24,76 @@ class ConnectionHandler {
     });
 
     this.socket.emit("getOnlineUsers", Object.keys(userSocketMap));
+
+    // ✅ User connect થયા પછી તેના બધા groups માં auto-join કરાવો
+    this.autoJoinUserGroups();
+  }
+
+  // ✅ નવું function: User ના બધા groups માં automatically join કરાવવા માટે
+  async autoJoinUserGroups() {
+    try {
+      console.log(`🔄 Auto-joining user ${this.userId} to their groups...`);
+
+      const userObjectId = new mongoose.Types.ObjectId(this.userId);
+
+      // User ના બધા group conversations find કરો
+      const userGroups = await ConversationHistory.find({
+        chatType: "group",
+        "userIds.user": userObjectId,
+      }).select("groupId groupName");
+
+      console.log(
+        `📋 Found ${userGroups.length} groups for user ${this.userId}`
+      );
+
+      // બધા groups માં join કરાવો
+      for (const group of userGroups) {
+        const groupId = group.groupId.toString();
+        this.socket.join(groupId);
+        console.log(
+          `✅ User ${this.userId} auto-joined group ${groupId} (${
+            group.groupName || "Unnamed Group"
+          })`
+        );
+      }
+
+      if (userGroups.length > 0) {
+        console.log(
+          `🎯 User ${this.userId} successfully joined ${userGroups.length} groups`
+        );
+      }
+    } catch (error) {
+      console.error(`❌ Error auto-joining user groups:`, error);
+    }
   }
 
   handleChatOpen() {
-    this.socket.on("openChat", async (data) => {
+    // ✅ OpenChat event ને openChatWith માં rename કર્યું consistency માટે
+    this.socket.on("openChatWith", async (data) => {
       console.log("📂 Chat opened:", data);
 
       try {
-        const { receiverId, groupId, chatType } = data;
+        const { userId, chatWithUserId, groupId, chatType } = data;
 
-        if (chatType === "private" && receiverId) {
+        if (chatType === "private" && chatWithUserId) {
           // Private chat opened
-          openedChats[this.userId] = receiverId;
+          openedChats[this.userId] = chatWithUserId;
           console.log(
-            `👤 User ${this.userId} opened private chat with ${receiverId}`
+            `👤 User ${this.userId} opened private chat with ${chatWithUserId}`
           );
 
           // Auto-mark messages as read when chat is opened
-          await this.markPrivateMessagesAsRead(receiverId);
+          await this.markPrivateMessagesAsRead(chatWithUserId);
         } else if (chatType === "group" && groupId) {
           // Group chat opened
           openedChats[this.userId] = groupId;
           console.log(`👥 User ${this.userId} opened group chat ${groupId}`);
 
-          // Join group room
-          this.socket.join(groupId);
+          // Join group room (if not already joined)
+          if (!this.socket.rooms.has(groupId)) {
+            this.socket.join(groupId);
+            console.log(`✅ User ${this.userId} joined group room ${groupId}`);
+          }
 
           // Auto-mark group messages as read when chat is opened
           await this.markGroupMessagesAsRead(groupId);
@@ -59,6 +104,21 @@ class ConnectionHandler {
       } catch (error) {
         console.error("❌ Error handling chat open:", error);
       }
+    });
+
+    // Backward compatibility માટે openChat event પણ રાખો
+    this.socket.on("openChat", async (data) => {
+      console.log("📂 Legacy openChat event received:", data);
+      // Convert to new format and handle
+      const convertedData = {
+        userId: this.userId,
+        chatWithUserId: data.receiverId,
+        groupId: data.groupId,
+        chatType: data.chatType,
+      };
+
+      // Re-emit as openChatWith
+      this.socket.emit("openChatWith", convertedData);
     });
 
     // Handle chat close
@@ -102,6 +162,9 @@ class ConnectionHandler {
           conversation,
           userObjectId
         );
+
+        // Remove unread messages for this user
+        UnreadCountService.removeUnreadMessages(conversation, userObjectId);
 
         // Save conversation
         await conversation.save();
@@ -160,6 +223,9 @@ class ConnectionHandler {
           userObjectId
         );
 
+        // Remove unread messages for this user
+        UnreadCountService.removeUnreadMessages(conversation, userObjectId);
+
         // Save conversation
         await conversation.save();
         console.log(
@@ -187,14 +253,33 @@ class ConnectionHandler {
   }
 
   handleGroupJoin() {
-    this.socket.on("joinGroup", (groupId) => {
-      this.socket.join(groupId);
-      console.log(`👥 User ${this.userId} joined group ${groupId}`);
+    this.socket.on("joinGroup", (data) => {
+      // ✅ Data object અથવા direct groupId handle કરો
+      const groupId = typeof data === "object" ? data.groupId : data;
+
+      if (groupId) {
+        this.socket.join(groupId);
+        console.log(`👥 User ${this.userId} manually joined group ${groupId}`);
+      } else {
+        console.log(`❌ Invalid groupId received in joinGroup:`, data);
+      }
     });
 
-    this.socket.on("leaveGroup", (groupId) => {
-      this.socket.leave(groupId);
-      console.log(`👥 User ${this.userId} left group ${groupId}`);
+    this.socket.on("leaveGroup", (data) => {
+      // ✅ Data object અથવા direct groupId handle કરો
+      const groupId = typeof data === "object" ? data.groupId : data;
+
+      if (groupId) {
+        this.socket.leave(groupId);
+        console.log(`👥 User ${this.userId} left group ${groupId}`);
+
+        // Remove from opened chats if this group was open
+        if (openedChats[this.userId] === groupId) {
+          delete openedChats[this.userId];
+        }
+      } else {
+        console.log(`❌ Invalid groupId received in leaveGroup:`, data);
+      }
     });
   }
 

@@ -129,7 +129,7 @@ exports.getfilterByUser = async (req, res) => {
   try {
     const { filter, searchQuery } = req.body; // include searchQuery
     console.log("req.body --->/", req.body);
-    const user = await User.findById(req.user._id).select("-password");
+    const user = await User.findById(req.user.userId).select("-password");
 
     if (!user) {
       return res.status(404).json({ message: "User not found" });

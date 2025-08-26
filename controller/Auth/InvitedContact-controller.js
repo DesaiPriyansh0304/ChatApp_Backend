@@ -1,5 +1,6 @@
-const User = require("../../model/User-model");
+const UserModel = require("../../model/User-model");
 const sendEmailUtil = require("../../utils/Generate/Nodemailerutil");
+const generateToken = require("../../utils/Generate/generateToken");
 const jwt = require("jsonwebtoken");
 
 //verify-inviteduser
@@ -24,8 +25,8 @@ exports.invitedUsersverify = async (req, res) => {
     let decoded;
     try {
       decoded = jwt.verify(token, JWT_SECRET);
-    } catch (err) {
-      console.error("Token verification failed:", err.message);
+    } catch (error) {
+      console.log("Token verification failed:", error.message);
       const msg =
         err.name === "TokenExpiredError"
           ? "Token has expired"
@@ -37,7 +38,7 @@ exports.invitedUsersverify = async (req, res) => {
     const inviterId = decoded.inviterId; // Token માં inviter ID પણ store કરીશું
 
     // 🔍 Find inviter
-    const inviter = await User.findById(inviterId);
+    const inviter = await UserModel.findById(inviterId);
     if (!inviter) {
       return res
         .status(404)
@@ -57,7 +58,7 @@ exports.invitedUsersverify = async (req, res) => {
     }
 
     // ✅ Update inviter's invitedUsers[].invited_is_Confirmed = true
-    await User.updateOne(
+    await UserModel.updateOne(
       { _id: inviter._id, "invitedUsers.email": invitedUserEmail },
       { $set: { "invitedUsers.$.invited_is_Confirmed": true } }
     );
@@ -72,69 +73,71 @@ exports.invitedUsersverify = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error in verifyInvitedUser:", error);
+    console.log("Error in verifyInvitedUser:", error);
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
 
-//invitedUsers - હવે user create નહીં કરશે
+//invitedUsers
 exports.invitedUsers = async (req, res) => {
   try {
-    const inviterId = req.user._id;
+    const inviterId = req.user.userId;
     const rawEmail = req.body.email;
     const message = req.body.message || "";
+    // console.log("inviterId --->/Invited-Controller", inviterId);
+    // console.log("rawEmail --->/Invited-Controller", rawEmail);
+    // console.log("message --->/Invited-Controller", message);
 
     if (!rawEmail) {
-      return res.status(400).json({ message: "Email is required." });
+      return res.status(400).json({
+        status: 400,
+        message: "Email is required.",
+      });
     }
 
     const email = rawEmail.trim().toLowerCase();
 
-    // ✅ Check if user already exists with this email
-    const existingUser = await User.findOne({ email });
+    // user already exists
+    const existingUser = await UserModel.findOne({ email });
     if (existingUser) {
       return res.status(400).json({
+        status: 400,
         message:
           "User with this email already exists. They can directly login.",
       });
     }
 
-    const inviter = await User.findById(inviterId);
+    const inviter = await UserModel.findById(inviterId);
     if (!inviter) {
-      return res.status(404).json({ message: "Inviter not found." });
+      return res.status(404).json({
+        status: 400,
+        message: "Inviter not found.",
+      });
     }
 
-    // ✅ Check if already invited
+    //already invited
     const alreadyInvited = inviter.invitedUsers.some(
       (entry) => entry.email.toLowerCase() === email
     );
 
     if (alreadyInvited) {
       return res.status(400).json({
+        status: 400,
         message: "This email has already been invited.",
       });
     }
 
-    // ✅ Create JWT token with email and inviter info
-    const token = jwt.sign(
-      {
-        email: email,
-        inviterId: inviterId,
-      },
-      process.env.JWT_SECRET_KEY,
-      { expiresIn: "7d" }
-    );
-
+    const token = generateToken(inviter); //Generate Token
     const link = `http://localhost:5173/contact/${token}`;
 
-    // ✅ Send invitation email
+    //  Send invitation email
     await sendEmailUtil({
       to: email,
       subject: "You're Invited to join our Chat App!",
       text: `Hi,\n\nYou've been invited by ${inviter.firstname} ${inviter.lastname} to join our chat app.\n\nMessage: ${message}\n\nClick here to join: ${link}\n\nThis invitation will expire in 7 days.`,
     });
 
-    // ✅ Add only email to inviter's invitedUsers[] (NO user creation)
+    //  Add only email to inviter's invitedUsers[] (NO user creation)
     inviter.invitedUsers.push({
       email: email,
       invitationMessage: message,
@@ -142,16 +145,17 @@ exports.invitedUsers = async (req, res) => {
     });
     await inviter.save();
 
-    const updatedInviter = await User.findById(inviterId);
+    const updatedInviter = await UserModel.findById(inviterId);
 
     res.status(200).json({
-      message: "Invitation sent successfully.",
+      status: 200,
       invitedUsers: updatedInviter.invitedUsers,
     });
   } catch (error) {
-    console.error("InvitedUsers Error:", error);
-    res
-      .status(500)
-      .json({ message: "Internal server error during invitedUsers." });
+    console.log("InvitedUsers Error:", error);
+    res.status(500).json({
+      status: 500,
+      message: "Internal server error during invitedUsers.",
+    });
   }
 };

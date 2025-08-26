@@ -52,7 +52,15 @@ exports.GetAlluserData = async (req, res) => {
 //getdbUserdata
 exports.getdbUserdata = async (req, res) => {
   try {
-    const loginUserId = req.user._id.toString();
+    const loginUserId = req.user.userId?.toString();
+    // console.log("loginUserId --->GetUserData", loginUserId);
+
+    if (!loginUserId) {
+      return res.status(400).json({
+        status: 400,
+        message: "Invalid user ID",
+      });
+    }
 
     const loginUser = await UserModel.findById(loginUserId).select(
       "invitedUsers invitedBy"
@@ -65,17 +73,28 @@ exports.getdbUserdata = async (req, res) => {
       });
     }
 
-    const invitedUserIds = loginUser.invitedUsers.map((invite) =>
-      invite.user.toString()
+    // Debug logs
+    // console.log("🔍 loginUser.invitedUsers -->", loginUser.invitedUsers);
+    // console.log("🔍 loginUser.invitedBy -->", loginUser.invitedBy);
+
+    const invitedUserIds = (loginUser.invitedUsers || []).map((invite) =>
+      invite?.user?.toString()
     );
 
-    const invitedByIds = loginUser.invitedBy.map((invite) =>
-      invite._id.toString()
+    const invitedByIds = (loginUser.invitedBy || []).map((invite) =>
+      invite?._id?.toString()
     );
 
-    const excludeIds = [loginUserId, ...invitedUserIds, ...invitedByIds];
+    // console.log(" invitedUserIds -->", invitedUserIds);
+    // console.log(" invitedByIds -->", invitedByIds);
 
-    //Search query
+    const excludeIds = [loginUserId, ...invitedUserIds, ...invitedByIds].filter(
+      Boolean
+    );
+
+    // console.log("excludeIds (final) -->", excludeIds);
+
+    // Search query
     const searchQuery = req.query.search || "";
     const searchRegex = new RegExp(searchQuery, "i");
 
@@ -92,17 +111,18 @@ exports.getdbUserdata = async (req, res) => {
       ];
     }
 
+    // console.log(" Final Mongo filter -->", filter);
+
     const otherUsers = await UserModel.find(filter).select(
       "-password -otp -otpExpiresAt"
     );
 
     return res.status(200).json({
       status: 200,
-      message: "Other users fetched successfully",
       data: otherUsers,
     });
   } catch (error) {
-    console.error(" Error in getdbUserdata:/Userdata", error.message);
+    console.log(" Error in getdbUserdata:/Userdata", error.message);
     return res.status(500).json({
       status: 500,
       message: "Internal server error",
