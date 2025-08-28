@@ -33,20 +33,20 @@ exports.Register = async (req, res) => {
       password,
       profile_avatar,
     } = req.body;
+    // console.log("req.body --->Register", req.body);
 
     // Check if user already exists
     const userExist = await UserModel.findOne({ email });
     if (userExist) {
       return res.status(400).json({
         status: 400,
-        success: false,
         message: "Email already exists.",
       });
     }
 
     // Generate OTP
-    const otp = generateOtp();
-    const otpExpiresAt = new Date(Date.now() + 3 * 60 * 1000); // 3 minutes from now
+    // const otp = generateOtp();
+    const { otp, otpExpiresAt } = generateOtp(3); // default 3 minutes
 
     // Hash password
     const salt = await bcrypt.genSalt(10);
@@ -68,7 +68,7 @@ exports.Register = async (req, res) => {
     });
 
     //invited by
-    const inviter = await User.findOne({ "invitedUsers.email": email });
+    const inviter = await UserModel.findOne({ "invitedUsers.email": email });
     if (inviter) {
       // Add invitedBy info to the new user
       userCreated.invitedBy = [
@@ -95,17 +95,17 @@ exports.Register = async (req, res) => {
     });
 
     // Send response
-    res.status(201).json({
-      status: 201,
-      msg: "SignUp Successful. OTP sent to your email.Please verify",
+    res.status(200).json({
+      status: 200,
       // data: userCreated,
       userId: userCreated._id.toString(),
     });
   } catch (error) {
     console.log("Register Error:", error);
-    res
-      .status(500)
-      .json({ message: "Internal server error during registration." });
+    res.status(500).json({
+      status: 500,
+      message: "Internal server error during registration.",
+    });
   }
 };
 
@@ -229,6 +229,7 @@ exports.Login = async (req, res) => {
 exports.googlelogin = async (req, res) => {
   try {
     const { code } = req.body;
+    // console.log("req.body --->/Google Login", req.body);
 
     if (!code) {
       return res.status(400).json({
@@ -316,6 +317,7 @@ exports.googlelogin = async (req, res) => {
       });
     }
 
+    ///reponse error
     if (error.response) {
       console.log("Google API Error:", error.response.data);
       return res.status(400).json({
@@ -335,6 +337,7 @@ exports.googlelogin = async (req, res) => {
 exports.githublogin = async (req, res) => {
   try {
     const { code, redirect_uri } = req.body;
+    // console.log("req.body --->github", req.body);
 
     if (!code) {
       return res.status(400).json({
@@ -345,15 +348,15 @@ exports.githublogin = async (req, res) => {
 
     // Check if environment variables are set
     if (!GITHUB_CLIENT_ID || !GITHUB_CLIENT_SECRET) {
-      console.error("GitHub OAuth credentials not configured");
+      // console.log("GitHub OAuth credentials not configured");
       return res.status(500).json({
         status: 500,
         message: "GitHub OAuth not configured properly",
       });
     }
 
-    console.log("GitHub OAuth Code received:", code);
-    console.log("Redirect URI received:", redirect_uri);
+    // console.log("GitHub OAuth Code received:", code);
+    // console.log("Redirect URI received:", redirect_uri);
 
     // Step 1: Exchange code for access token
     const tokenRequestData = {
@@ -367,10 +370,10 @@ exports.githublogin = async (req, res) => {
       tokenRequestData.redirect_uri = redirect_uri;
     }
 
-    console.log("Token request data:", {
-      ...tokenRequestData,
-      client_secret: "[HIDDEN]",
-    });
+    // console.log("Token request data:", {
+    //   ...tokenRequestData,
+    //   client_secret: "[HIDDEN]",
+    // });
 
     const tokenResponse = await axios.post(GITHUB_TOKEN_URL, tokenRequestData, {
       headers: {
@@ -402,7 +405,7 @@ exports.githublogin = async (req, res) => {
       },
     });
 
-    console.log("GitHub user data received successfully");
+    // console.log("GitHub user data received successfully");
 
     const {
       id: githubId,
@@ -451,27 +454,27 @@ exports.githublogin = async (req, res) => {
       const firstname = nameParts[0] || "GitHub";
       const lastname = nameParts.slice(1).join(" ") || "User";
 
-      // Create user data object with proper mobile field handling
+      // Create user data
       const userData = {
         firstname: firstname,
         lastname: lastname,
         email: userEmail,
-        mobile: "0000000000", // Default mobile number for GitHub users
-        dob: new Date(), // Default date of birth
-        gender: "other", // Default gender
-        password: "github_oauth", // OAuth password placeholder
+        mobile: "",
+        dob: new Date(),
+        gender: "",
+        password: "github_oauth",
         profile_avatar: avatar_url || "",
-        is_Confirmed: true, // GitHub users are pre-confirmed
-        github_id: githubId.toString(), // Store GitHub ID as string
+        is_Confirmed: true,
+        github_id: githubId.toString(),
       };
 
-      console.log("Creating new user with data:", {
-        ...userData,
-        password: "[HIDDEN]",
-      });
+      // console.log("Creating new user with data:", {
+      //   ...userData,
+      //   password: "[HIDDEN]",
+      // });
 
       user = await UserModel.create(userData);
-      console.log("New user created for GitHub login");
+      // console.log("New user created for GitHub login");
     } else {
       // Update existing user's profile picture and GitHub ID if available
       let updated = false;
@@ -487,10 +490,10 @@ exports.githublogin = async (req, res) => {
       }
 
       // Make sure mobile field has a value if it's empty
-      if (!user.mobile || user.mobile === "") {
-        user.mobile = "0000000000"; // Default mobile for existing users
-        updated = true;
-      }
+      // if (!user.mobile || user.mobile === "") {
+      //   user.mobile = "";
+      //   updated = true;
+      // }
 
       if (updated) {
         await user.save();
@@ -510,7 +513,7 @@ exports.githublogin = async (req, res) => {
     // Successful GitHub login response
     res.status(200).json({
       status: 200,
-      message: "GitHub Login successful",
+      // message: "GitHub Login successful",
       userData: {
         _id: user._id,
         firstname: user.firstname,
@@ -519,18 +522,18 @@ exports.githublogin = async (req, res) => {
         profile_avatar: user.profile_avatar,
       },
       token: token,
-      userId: user._id.toString(),
+      // userId: user._id.toString(),
     });
 
-    console.log("GitHub login completed successfully for user:", user.email);
+    // console.log("GitHub login completed successfully for user:", user.email);
   } catch (error) {
-    console.error("GitHub Login Error:", error);
-    console.error("Error stack:", error.stack);
+    console.log("GitHub Login Error:", error);
+    console.log("Error stack:", error.stack);
 
     // Better error handling
     if (error.response) {
-      console.error("GitHub API Error Data:", error.response.data);
-      console.error("GitHub API Status:", error.response.status);
+      console.log("GitHub API Error Data:", error.response.data);
+      console.log("GitHub API Status:", error.response.status);
 
       // Handle specific GitHub API errors
       if (error.response.status === 401) {
@@ -572,7 +575,7 @@ exports.githublogin = async (req, res) => {
 
     // Handle database/validation errors
     if (error.name === "ValidationError") {
-      console.error("Mongoose validation error:", error.message);
+      console.log("Mongoose validation error:", error.message);
 
       // Extract validation error details
       const validationErrors = Object.keys(error.errors).map((key) => {
@@ -590,7 +593,7 @@ exports.githublogin = async (req, res) => {
     }
 
     if (error.name === "MongoError" || error.name === "MongoServerError") {
-      console.error("MongoDB error:", error.message);
+      console.log("MongoDB error:", error.message);
       return res.status(500).json({
         status: 500,
         message: "Database connection error. Please try again later.",
@@ -599,7 +602,7 @@ exports.githublogin = async (req, res) => {
 
     // Handle duplicate email errors
     if (error.code === 11000) {
-      console.error("Duplicate key error:", error.message);
+      console.log("Duplicate key error:", error.message);
       return res.status(400).json({
         status: 400,
         message: "An account with this email already exists.",

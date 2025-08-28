@@ -63,7 +63,7 @@ class ConnectionHandler {
         );
       }
     } catch (error) {
-      console.error(`❌ Error auto-joining user groups:`, error);
+      console.log(`❌ Error auto-joining user groups:`, error);
     }
   }
 
@@ -102,7 +102,7 @@ class ConnectionHandler {
         // Debug socket states
         UnreadCountService.debugSocketStates();
       } catch (error) {
-        console.error("❌ Error handling chat open:", error);
+        console.log("❌ Error handling chat open:", error);
       }
     });
 
@@ -190,7 +190,7 @@ class ConnectionHandler {
         });
       }
     } catch (error) {
-      console.error("❌ Error marking private messages as read:", error);
+      console.log("❌ Error marking private messages as read:", error);
     }
   }
 
@@ -248,7 +248,7 @@ class ConnectionHandler {
         });
       }
     } catch (error) {
-      console.error("❌ Error marking group messages as read:", error);
+      console.log("❌ Error marking group messages as read:", error);
     }
   }
 

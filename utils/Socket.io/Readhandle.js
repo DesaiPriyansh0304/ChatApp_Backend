@@ -87,7 +87,7 @@ class ReadReceiptsHandler {
           previousCount,
         });
       } catch (error) {
-        console.error("❌ Error marking message as read:", error);
+        console.log("❌ Error marking message as read:", error);
       }
     });
   }
@@ -159,7 +159,7 @@ class ReadReceiptsHandler {
           previousCount,
         });
       } catch (error) {
-        console.error("❌ Error marking group message as read:", error);
+        console.log("❌ Error marking group message as read:", error);
       }
     });
   }

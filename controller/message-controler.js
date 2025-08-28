@@ -206,7 +206,7 @@ exports.getChatHistory = async (req, res) => {
       });
     }
   } catch (error) {
-    console.error("Chat history error:", error);
+    console.log("Chat history error:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -330,7 +330,7 @@ exports.getChatHistory = async (req, res) => {
 //     );
 //     res.status(200).json(conversations);
 //   } catch (error) {
-//     console.error("🔥 Error in Unreadmessage:", error);
+//     console.log("🔥 Error in Unreadmessage:", error);
 //     res.status(500).json({
 //       message: "Server Error",
 //       error: error.message,
@@ -400,7 +400,7 @@ exports.MarkMessagesAsRead = async (req, res) => {
       });
     }
   } catch (error) {
-    console.error("🔥 Error in MarkMessagesAsRead:", error);
+    console.log("🔥 Error in MarkMessagesAsRead:", error);
     res.status(500).json({
       message: "Server Error",
       error: error.message,
@@ -593,7 +593,7 @@ exports.Unreadmessage = async (req, res) => {
 
     res.status(200).json(formattedConversations);
   } catch (error) {
-    console.error("🔥 Error in Unreadmessage:", error);
+    console.log("🔥 Error in Unreadmessage:", error);
     res.status(500).json({
       message: "Server Error",
       error: error.message,

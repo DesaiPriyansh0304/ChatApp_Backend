@@ -37,7 +37,7 @@ exports.chatbot = async (req, res) => {
 
       console.log("🤖 AI Response generated successfully");
     } catch (aiError) {
-      console.error("❌ Error generating AI response:", aiError);
+      console.log("❌ Error generating AI response:", aiError);
 
       // Fallback responses based on common queries
       const fallbackResponses = {
@@ -75,7 +75,7 @@ exports.chatbot = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("❌ Error in chatbot controller:", error);
+    console.log("❌ Error in chatbot controller:", error);
 
     // Send error response with fallback
     res.status(500).json({

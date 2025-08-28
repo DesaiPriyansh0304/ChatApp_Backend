@@ -1,4 +1,4 @@
-const User = require("../../model/User-model");
+const UserModel = require("../../model/User-model");
 const bcrypt = require("bcryptjs");
 const generateOtp = require("../../utils/Generate/generateOTP");
 const sendEmailUtil = require("../../utils/Generate/Nodemailerutil");
@@ -16,17 +16,16 @@ exports.forgotPassword = async (req, res) => {
   }
 
   try {
-    const user = await User.findOne({ email });
+    const user = await UserModel.findOne({ email });
     if (!user) {
       return res.status(404).json({
-        statusCode: 404,
+        status: 404,
         message: "User not found.",
       });
     }
 
     //otp
-    const otp = generateOtp();
-    const otpExpiresAt = Date.now() + 3 * 60 * 1000; // 3 minutes
+    const { otp, otpExpiresAt } = generateOtp();
 
     user.otp = otp;
     user.otpExpiresAt = otpExpiresAt;
@@ -66,7 +65,7 @@ exports.resetPassword = async (req, res) => {
   }
 
   try {
-    const user = await User.findOne({ email });
+    const user = await UserModel.findOne({ email });
 
     if (!user || !user.otp || user.otp !== otp) {
       return res.status(400).json({

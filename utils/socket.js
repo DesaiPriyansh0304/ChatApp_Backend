@@ -157,7 +157,7 @@
 //         await conversation.save();
 //         // console.log(" Message emitted to users:", normalizedMessage);
 //       } catch (err) {
-//         console.error(" Error saving message:", err);
+//         console.log(" Error saving message:", err);
 //       }
 //     });
 
@@ -189,7 +189,7 @@
 
 //         await conversation.save();
 //       } catch (err) {
-//         console.error("Error marking messages as read:", err);
+//         console.log("Error marking messages as read:", err);
 //       }
 //     });
 
@@ -302,7 +302,7 @@
 //         }
 
 //         // if (!conversation) {
-//         //   console.error(
+//         //   console.log(
 //         //     " Group conversation not found. Aborting message store."
 //         //   );
 //         //   return;
@@ -337,7 +337,7 @@
 //           io.to(emitRoom).emit("groupMessage", normalizedMessage);
 //         }
 //       } catch (error) {
-//         console.error("⚫Error in groupMessage:", error);
+//         console.log("⚫Error in groupMessage:", error);
 //       }
 //     });
 
@@ -548,7 +548,7 @@ function initSocket(server) {
         await conversation.save();
         console.log("💾 Message saved in DB");
       } catch (err) {
-        console.error("❌ Error saving private message:", err);
+        console.log("❌ Error saving private message:", err);
       }
     });
 
@@ -667,7 +667,7 @@ function initSocket(server) {
         io.to(groupId).emit("groupMessage", normalizedMessage);
         console.log("💾 Group message saved and emitted");
       } catch (error) {
-        console.error("⚫Error in groupMessage:", error);
+        console.log("⚫Error in groupMessage:", error);
       }
     });
 
@@ -714,8 +714,8 @@ function initSocket(server) {
             chatType: "private",
           });
         }
-      } catch (err) {
-        console.error("❌ Error marking messages as read:", err);
+      } catch (error) {
+        console.log("❌ Error marking messages as read:", error);
       }
     });
 
@@ -750,7 +750,7 @@ function initSocket(server) {
         await conversation.save();
         console.log(`✅ Group messages marked as read for ${userId}`);
       } catch (err) {
-        console.error("❌ Error marking group messages as read:", err);
+        console.log("❌ Error marking group messages as read:", err);
       }
     });
 

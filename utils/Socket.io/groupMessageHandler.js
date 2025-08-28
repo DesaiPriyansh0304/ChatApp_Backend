@@ -172,7 +172,7 @@ class GroupMessageHandler {
               affectedUserIds.push(userId);
             }
           } catch (error) {
-            console.error(
+            console.log(
               "❌ Error extracting userId for chat list update:",
               userObj,
               error
@@ -188,7 +188,7 @@ class GroupMessageHandler {
 
         console.log("✅ Group message processing completed successfully");
       } catch (error) {
-        console.error("⚫ Error in groupMessage:", error);
+        console.log("⚫ Error in groupMessage:", error);
         this.socket.emit("error", { message: "Failed to send message" });
       }
     });
@@ -255,7 +255,7 @@ class GroupMessageHandler {
           console.log(`👤 User ${userId} is not online, skipping room join`);
         }
       } catch (error) {
-        console.error(
+        console.log(
           "❌ Error in ensureGroupMembersJoined for userObj:",
           userObj,
           error
@@ -330,7 +330,7 @@ class GroupMessageHandler {
           offlineMembers.push(userId);
         }
       } catch (error) {
-        console.error(
+        console.log(
           "❌ Error processing userObj in emitToGroupMembers:",
           userObj,
           error
@@ -371,7 +371,7 @@ class GroupMessageHandler {
         console.log(`👤 User ${userId} is offline, message stored in DB`);
       });
     } catch (emitError) {
-      console.error("❌ Error emitting to group:", emitError);
+      console.log("❌ Error emitting to group:", emitError);
     }
 
     console.log(
@@ -458,7 +458,7 @@ class GroupMessageHandler {
 
       return hasPermission;
     } catch (error) {
-      console.error("❌ Error in checkUserPermission:", error);
+      console.log("❌ Error in checkUserPermission:", error);
       return false;
     }
   }

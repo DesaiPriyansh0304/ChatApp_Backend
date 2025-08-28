@@ -29,7 +29,7 @@ class ChatListHandler {
           `✅ Chat list sent for user ${this.userId} - ${chatList.length} chats found`
         );
       } catch (error) {
-        console.error("❌ Error fetching chat list:", error);
+        console.log("❌ Error fetching chat list:", error);
         this.socket.emit("chatListResponse", {
           success: false,
           error: "Failed to fetch chat list",
@@ -332,7 +332,7 @@ class ChatListHandler {
       console.log("✅ Final chat list prepared:", chatList.length, "chats");
       return chatList;
     } catch (error) {
-      console.error("❌ Error in fetchUserChats:", error);
+      console.log("❌ Error in fetchUserChats:", error);
       throw error;
     }
   }
@@ -364,7 +364,7 @@ class ChatListHandler {
         }
       }
     } catch (error) {
-      console.error("❌ Error updating chat list:", error);
+      console.log("❌ Error updating chat list:", error);
     }
   }
 }

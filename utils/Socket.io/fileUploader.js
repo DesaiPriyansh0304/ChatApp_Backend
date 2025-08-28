@@ -51,7 +51,7 @@ const uploadFiles = async ({
       uploadedFileNames,
     };
   } catch (error) {
-    console.error("❌ Error uploading files:", error);
+    console.log("❌ Error uploading files:", error);
     throw error;
   }
 };

@@ -42,7 +42,7 @@ exports.updateProfile = async (req, res) => {
       res.status(201).json({ success: true, user: updateUser });
     }
   } catch (error) {
-    console.error("Login Error:", error);
+    console.log("Login Error:", error);
     res.status(500).json({ message: "Internal server error  updateProfile" });
   }
 };
@@ -93,7 +93,7 @@ exports.favorite = async (req, res) => {
 
     res.status(200).json({ msg: "Message added to favorites" });
   } catch (error) {
-    console.error("Favorite Error:", error);
+    console.log("Favorite Error:", error);
     res.status(500).json({ msg: "Server Error" });
   }
   ``;
@@ -119,7 +119,7 @@ exports.SearchUser = async (req, res) => {
 
     res.status(200).json(users);
   } catch (err) {
-    console.error("Search error:", err);
+    console.log("Search error:", err);
     res.status(500).json({ error: "Server error" });
   }
 };
@@ -157,8 +157,8 @@ exports.getfilterByUser = async (req, res) => {
             invitationMessage: invitedUser.invitationMessage || null,
             user: populatedUser,
           };
-        } catch (err) {
-          console.error("Error fetching invited user:", err);
+        } catch (error) {
+          console.log("Error fetching invited user:", error);
           return {
             _id: invitedUser._id,
             email: invitedUser.email,
@@ -230,7 +230,7 @@ exports.getfilterByUser = async (req, res) => {
       users: finalResult,
     });
   } catch (error) {
-    console.error("getFilteredInvitedUsers Error:", error);
+    console.log("getFilteredInvitedUsers Error:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -248,8 +248,8 @@ exports.onlineByUser = async (req, res) => {
     );
 
     res.status(200).json({ users });
-  } catch (err) {
-    console.error("Error fetching user details:", err);
+  } catch (error) {
+    console.log("Error fetching user details:", error);
     res.status(500).json({ error: "Server error" });
   }
 };
@@ -358,7 +358,7 @@ exports.getAllChatsForUser = async (req, res) => {
       data: chatList,
     });
   } catch (error) {
-    console.error("Error fetching chats:", error);
+    console.log("Error fetching chats:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch chats",

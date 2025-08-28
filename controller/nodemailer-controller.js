@@ -39,7 +39,7 @@ exports.verifyOtp = async (req, res) => {
       .status(200)
       .json({ message: "OTP verified successfully. Account activated." });
   } catch (error) {
-    console.error("OTP Verification Error:", error);
+    console.log("OTP Verification Error:", error);
     res.status(500).json({ message: "Internal Server Error" });
   }
 };
@@ -77,7 +77,7 @@ exports.resendOtp = async (req, res) => {
       message: "OTP resent successfully. Check your email.",
     });
   } catch (error) {
-    console.error("OTP Resend Error:", error);
+    console.log("OTP Resend Error:", error);
     res.status(500).json({ message: "Internal Server Error" });
   }
 };

@@ -93,7 +93,7 @@ class PrivateMessageHandler {
           affectedUserIds
         );
       } catch (err) {
-        console.error("❌ Error saving private message:", err);
+        console.log("❌ Error saving private message:", err);
       }
     });
   }

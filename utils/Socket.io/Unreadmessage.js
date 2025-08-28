@@ -35,12 +35,12 @@ class UnreadCountService {
 
       return true;
     } catch (error) {
-      console.error("❌ Error in handlePrivateUnreadCount:", error);
+      console.log("❌ Error in handlePrivateUnreadCount:", error);
       return false;
     }
   }
 
-  // ✅ FIXED: Group unread count handler with proper user handling
+  //  FIXED: Group unread count handler with proper user handling
   static handleGroupUnreadCount(
     conversation,
     senderId,
@@ -117,7 +117,7 @@ class UnreadCountService {
             `👤 User ${userId} - Online: ${isUserOnline}, Chat Open: ${isGroupChatOpen}`
           );
 
-          // જો user online છે અને group chat open છે તો unread count ન વધારો
+          //  user online- group chat open -unread count not count
           if (!isUserOnline || !isGroupChatOpen) {
             this.increaseUnreadCount(conversation, userObjectId);
             this.addUnreadMessage(
@@ -129,8 +129,8 @@ class UnreadCountService {
             console.log(`📊 Increased unread count for user: ${userId}`);
           }
         } catch (innerError) {
-          console.error(
-            "❌ Error processing userObj in handleGroupUnreadCount:",
+          console.log(
+            "Error processing userObj in handleGroupUnreadCount:",
             userObj,
             innerError
           );
@@ -139,7 +139,7 @@ class UnreadCountService {
 
       return true;
     } catch (error) {
-      console.error("❌ Error in handleGroupUnreadCount:", error);
+      console.log("Error in handleGroupUnreadCount:", error);
       return false;
     }
   }
@@ -155,7 +155,7 @@ class UnreadCountService {
         messageId: messageData.messageId || new mongoose.Types.ObjectId(),
         senderId: messageData.senderId,
         receiverId: messageData.receiverId,
-        groupId: messageData.groupId, // ✅ Group ID add કર્યું
+        groupId: messageData.groupId,
         type: messageData.type,
         content: messageData.content || [],
         text: messageData.text || "",
